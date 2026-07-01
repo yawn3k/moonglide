@@ -1,0 +1,8 @@
+[package]
+name = "moonglide"
+edition = "2021"
+
+[dependencies]
+sdl2 = { version = "0.38", features = ["use-pkgconfig", "hidapi"] }
+mlua = { version = "0.10", features = ["luajit"] }
+uinput = "0.1"
