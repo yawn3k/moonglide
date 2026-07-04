@@ -119,9 +119,13 @@ Unrecognized SDL button indices produce `unknown_N` names (use as string literal
 
 `key.f1` through `key.f12`
 
-### Letters and digits
+### Letters
 
-`key.a`–`key.z`, `key.0`–`key.9`
+`key.a`–`key.z`
+
+### Digits (spelled out)
+
+`key.zero`–`key.nine` (since `key.0` is Lua syntax error — digits use spelled-out names)
 
 ## String literals are not accepted
 
