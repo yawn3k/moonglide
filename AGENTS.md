@@ -94,9 +94,9 @@ In `config.rs`:
 
 4. `load()` reads a file, executes it, calls `process_pending()`, returns the final `Config`.
 
-String shorthand actions (e.g. `bind.press("a", "space")`) are auto-wrapped as Lua functions via `extract_func()`:
-- `press` / `hold` / `chord` → wrapper calls `press("...")`
-- `release` / `tap` / `double_press` → wrapper calls `instant("...")`
+Typed ref actions (e.g. `bind.press(con.a, key.space)`) are auto-wrapped as Lua functions via `extract_func()`:
+- `press` / `hold` / `chord` → wrapper calls `press(key.X)`
+- `release` / `tap` / `double_press` → wrapper calls `instant(key.X)`
 
 See [docs/bindings.md](docs/bindings.md) for the full Lua API reference.
 

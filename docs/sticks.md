@@ -120,7 +120,7 @@ bind.press(con.left_trigger, function()
     press(key.left_control)
 end)
 bind.release(con.left_trigger, function()
-    instant("4")
+    instant(key.four)
 end)
 ```
 
