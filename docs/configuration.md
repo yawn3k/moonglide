@@ -11,6 +11,22 @@ moonglide [config.lua]
 
 The entire script runs on startup. Bindings, gyro config, and globals are all set via Lua globals and function calls.
 
+## Generating editor autocomplete definitions
+
+```bash
+moonglide --gen-meta [path]
+```
+
+Writes a `moonglide.d.lua` definition file that LuaLS uses for autocomplete and hover docs on all tables (`con.*`, `key.*`, `mouse.*`, `bind.*`) and config globals. Defaults to `moonglide.d.lua` in the current directory.
+
+Add the path to your editor's `Lua.workspace.library` for autocomplete in any project:
+
+```json
+{
+  "Lua.workspace.library": ["/path/to/moonglide.d.lua"]
+}
+```
+
 ## REPL (read-eval-print loop)
 
 While Moonglide is running, type Lua expressions at the terminal. Each expression is evaluated immediately.
