@@ -10,18 +10,51 @@ pub enum CalCmd {
 	Stop,
 }
 
+fn make_ref(lua: &Lua, src: &str, field: &str, val: &str) -> mlua::Result<mlua::Table> {
+	let t = lua.create_table()?;
+	t.set("__kind", "ref")?;
+	t.set("src", src)?;
+	t.set("field", field)?;
+	t.set("val", val)?;
+	Ok(t)
+}
+
+fn extract_ref(val: &mlua::Value) -> mlua::Result<(String, String, String)> {
+	match val {
+		mlua::Value::Table(t) => {
+			if let Ok(kind) = t.get::<String>("__kind") {
+				if kind == "ref" {
+					let src: String = t.get("src")?;
+					let field: String = t.get("field")?;
+					let val: String = t.get("val")?;
+					return Ok((src, field, val));
+				}
+			}
+			Err(mlua::Error::external("expected a con/key/mouse reference"))
+		}
+		mlua::Value::String(s) => {
+			let s = s.to_str().map_err(|e| mlua::Error::external(e.to_string()))?;
+			if s.is_empty() {
+				return Ok(("raw".into(), String::new(), String::new()));
+			}
+			Err(mlua::Error::external(format!(
+				"raw string {:?} not allowed, use con.* / key.* / mouse.* instead", s
+			)))
+		}
+		_ => Err(mlua::Error::external("expected a con/key/mouse reference or function")),
+	}
+}
+
 fn store_action(entry: &mlua::Table, action: mlua::Value) -> mlua::Result<()> {
 	match action {
 		mlua::Value::Function(f) => entry.set("func", f),
-		mlua::Value::String(s) => {
-			let key = s.to_str().map_err(|e| mlua::Error::external(e.to_string()))?;
-			entry.set("action_string", key.to_string())
+		val => {
+			let (src, field, val_str) = extract_ref(&val)?;
+			entry.set("action_string", val_str)?;
+			entry.set("action_src", src)?;
+			entry.set("action_field", field)?;
+			Ok(())
 		}
-		mlua::Value::Table(t) => {
-			let key: String = t.get("key").map_err(|_| mlua::Error::external("table action missing 'key'"))?;
-			entry.set("action_string", key)
-		}
-		_ => Err(mlua::Error::external("action must be a function, string, or helper table")),
 	}
 }
 
@@ -42,7 +75,14 @@ fn extract_func(
 			"tap" => "instant",
 			_ => "press",
 		};
-		let script = format!("return function() {}({:?}) end", helper, action_str);
+		let src: String = entry.get("action_src").unwrap_or("raw".into());
+		let field: String = entry.get("action_field").unwrap_or_default();
+		let script = match src.as_str() {
+			"key" => format!("return function() {}(key.{}) end", helper, field),
+			"mouse" => format!("return function() {}(mouse.{}) end", helper, field),
+			"con" => format!("return function() {}(con.{}) end", helper, field),
+			_ => format!("return function() {}({:?}) end", helper, action_str),
+		};
 		let wrapper: mlua::Function = lua.load(&script).eval().map_err(|e| e.to_string())?;
 		let key = lua.create_registry_value(wrapper).map_err(|e| e.to_string())?;
 		let idx = callbacks.len();
@@ -99,8 +139,9 @@ fn setup_dsl(
 		-> mlua::Result<mlua::Function>
 	{
 		if has_opts {
-			lua.clone().create_function(move |_, (btn, action, opts): (String, mlua::Value, Option<mlua::Table>)| {
+			lua.clone().create_function(move |_, (btn_val, action, opts): (mlua::Value, mlua::Value, Option<mlua::Table>)| {
 				let entry = lua2.create_table()?;
+				let (_, _, btn) = extract_ref(&btn_val)?;
 				entry.set("button", btn)?;
 				entry.set("event", event)?;
 				store_action(&entry, action)?;
@@ -112,8 +153,9 @@ fn setup_dsl(
 		b.push(entry)
 	})
 		} else {
-			lua.clone().create_function(move |_, (btn, action): (String, mlua::Value)| {
+			lua.clone().create_function(move |_, (btn_val, action): (mlua::Value, mlua::Value)| {
 				let entry = lua2.create_table()?;
+				let (_, _, btn) = extract_ref(&btn_val)?;
 				entry.set("button", btn)?;
 				entry.set("event", event)?;
 				store_action(&entry, action)?;
@@ -149,10 +191,15 @@ fn setup_dsl(
 
 	let c = chords.clone();
 	let lua2 = lua.clone();
-	let chord_fn = lua.clone().create_function(move |_, (btns, action, _opts): (Vec<String>, mlua::Value, Option<mlua::Table>)| {
+	let chord_fn = lua.clone().create_function(move |_, (btns, action, _opts): (Vec<mlua::Value>, mlua::Value, Option<mlua::Table>)| {
 		let entry = lua2.create_table()?;
 		entry.set("event", "press")?;
-		entry.set("buttons", btns)?;
+		let mut names = Vec::new();
+		for b in &btns {
+			let (_, _, name) = extract_ref(b)?;
+			names.push(name);
+		}
+		entry.set("buttons", names)?;
 		store_action(&entry, action)?;
 		c.push(entry)
 	}).map_err(|e| e.to_string())?;
@@ -160,8 +207,9 @@ fn setup_dsl(
 
 	let dp = double_press.clone();
 	let lua2 = lua.clone();
-	let double_press_fn = lua.create_function(move |_, (btn, action, opts): (String, mlua::Value, Option<mlua::Table>)| {
+	let double_press_fn = lua.create_function(move |_, (btn_val, action, opts): (mlua::Value, mlua::Value, Option<mlua::Table>)| {
 		let entry = lua2.create_table()?;
+		let (_, _, btn) = extract_ref(&btn_val)?;
 		entry.set("button", btn)?;
 		entry.set("event", "tap")?;
 		store_action(&entry, action)?;
@@ -174,9 +222,15 @@ fn setup_dsl(
 
 	let ms = modeshifts.clone();
 	let lua2 = lua.clone();
-	let modeshift_fn = lua.create_function(move |_, (modifiers, btn, action): (Vec<String>, String, mlua::Value)| {
+	let modeshift_fn = lua.create_function(move |_, (modifiers, btn_val, action): (Vec<mlua::Value>, mlua::Value, mlua::Value)| {
 		let entry = lua2.create_table()?;
-		entry.set("modifiers", modifiers)?;
+		let mut mods = Vec::new();
+		for m in &modifiers {
+			let (_, _, name) = extract_ref(m)?;
+			mods.push(name);
+		}
+		entry.set("modifiers", mods)?;
+		let (_, _, btn) = extract_ref(&btn_val)?;
 		entry.set("button", btn)?;
 		entry.set("event", "press")?;
 		store_action(&entry, action)?;
@@ -187,10 +241,9 @@ fn setup_dsl(
 	globals.set("bind", bind_table).map_err(|e| e.to_string())?;
 
 	// ── con/key/mouse tables ──
-	let set_str = |t: &mlua::Table, k: &str| t.set(k, k).map_err(|e| e.to_string());
-
+	let ok = |r: mlua::Result<()>| r.map_err(|e| e.to_string());
 	let con = lua.create_table().map_err(|e| e.to_string())?;
-	for name in &[
+	for &name in &[
 		"a", "b", "x", "y",
 		"dpad_up", "dpad_down", "dpad_left", "dpad_right",
 		"left_shoulder", "right_shoulder",
@@ -204,11 +257,13 @@ fn setup_dsl(
 		"right_stick_up", "right_stick_down", "right_stick_left", "right_stick_right",
 		"left_ring_inner", "left_ring_outer",
 		"right_ring_inner", "right_ring_outer",
-	] { set_str(&con, name)?; }
-	globals.set("con", con).map_err(|e| e.to_string())?;
+	] {
+		ok(con.set(name, make_ref(lua, "con", name, name).map_err(|e| e.to_string())?))?;
+	}
+	ok(globals.set("con", con))?;
 
 	let key = lua.create_table().map_err(|e| e.to_string())?;
-	for name in &[
+	for &name in &[
 		"esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
 		"minus", "equal", "backspace", "tab",
 		"q", "w", "e", "r", "t", "y", "u", "i", "o", "p",
@@ -225,14 +280,23 @@ fn setup_dsl(
 		"home", "up", "page_up", "left", "right", "end", "down", "page_down",
 		"insert", "delete",
 		"left_meta", "right_meta",
-	] { set_str(&key, name)?; }
-	globals.set("key", key).map_err(|e| e.to_string())?;
+		"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+	] {
+		let val = match name {
+			"zero" => "0", "one" => "1", "two" => "2", "three" => "3", "four" => "4",
+			"five" => "5", "six" => "6", "seven" => "7", "eight" => "8", "nine" => "9",
+			_ => name,
+		};
+		let r = make_ref(lua, "key", name, val).map_err(|e| e.to_string())?;
+		ok(key.set(name, r))?;
+	}
+	ok(globals.set("key", key))?;
 
 	let mouse = lua.create_table().map_err(|e| e.to_string())?;
-	mouse.set("left", "left_mouse").map_err(|e| e.to_string())?;
-	mouse.set("right", "right_mouse").map_err(|e| e.to_string())?;
-	mouse.set("middle", "middle_mouse").map_err(|e| e.to_string())?;
-	globals.set("mouse", mouse).map_err(|e| e.to_string())?;
+	ok(mouse.set("left", make_ref(lua, "mouse", "left", "left_mouse").map_err(|e| e.to_string())?))?;
+	ok(mouse.set("right", make_ref(lua, "mouse", "right", "right_mouse").map_err(|e| e.to_string())?))?;
+	ok(mouse.set("middle", make_ref(lua, "mouse", "middle", "middle_mouse").map_err(|e| e.to_string())?))?;
+	ok(globals.set("mouse", mouse))?;
 
 	let gs = gyro_shared.clone();
 	let gyro_fn = lua.create_function(move |_, tbl: mlua::Table| {
@@ -244,7 +308,21 @@ fn setup_dsl(
 			"hold_disable" => GyroMode::HoldDisable,
 			_ => GyroMode::AlwaysOn,
 		};
-		let btn: Option<String> = tbl.get("button").ok();
+		let btn: Option<String> = match tbl.get::<mlua::Value>("button") {
+			Ok(mlua::Value::Table(t)) => {
+				if let Ok(kind) = t.get::<String>("__kind") {
+					if kind == "ref" {
+						t.get::<String>("val").ok()
+					} else {
+						None
+					}
+				} else {
+					None
+				}
+			}
+			Ok(mlua::Value::String(s)) => Some(s.to_string_lossy().to_string()),
+			_ => None,
+		};
 		let sens_val: mlua::Value = tbl.get("sensitivity").unwrap_or(mlua::Value::Number(1.0));
 		let gyro_val: mlua::Value = tbl.get("gyro_sens").unwrap_or(sens_val);
 		let (sens_h, sens_v) = parse_sens_pair(&gyro_val);
@@ -471,8 +549,9 @@ mod tests {
 		setup_dsl(&lua, &gyro_shared, &cal_tx).unwrap();
 
 		lua.load(r#"
-			bind.press("a", "space")
-			bind.press("b", "enter")
+			bind.press(con.a, key.space)
+			bind.press(con.b, key.enter)
+			bind.chord({con.a, con.b}, key.f)
 		"#).exec().unwrap();
 
 		process_pending(&lua, &mut *callbacks.lock().unwrap(), &config, &gyro_shared).unwrap();
@@ -491,14 +570,16 @@ mod tests {
 		let (cal_tx, _cal_rx) = mpsc::channel();
 		setup_dsl(&lua, &gyro_shared, &cal_tx).unwrap();
 
-		// Table lookups resolve to the correct string
-		assert_eq!(lua.load("return con.a").eval::<String>().unwrap(), "a");
-		assert_eq!(lua.load("return con.left_shoulder").eval::<String>().unwrap(), "left_shoulder");
-		assert_eq!(lua.load("return key.space").eval::<String>().unwrap(), "space");
-		assert_eq!(lua.load("return key.left_control").eval::<String>().unwrap(), "left_control");
-		assert_eq!(lua.load("return mouse.left").eval::<String>().unwrap(), "left_mouse");
-		assert_eq!(lua.load("return mouse.right").eval::<String>().unwrap(), "right_mouse");
-		assert_eq!(lua.load("return mouse.middle").eval::<String>().unwrap(), "middle_mouse");
+		// Ref tables contain the correct field/val
+		assert_eq!(lua.load("return con.a.val").eval::<String>().unwrap(), "a");
+		assert_eq!(lua.load("return con.a.src").eval::<String>().unwrap(), "con");
+		assert_eq!(lua.load("return key.space.val").eval::<String>().unwrap(), "space");
+		assert_eq!(lua.load("return mouse.left.val").eval::<String>().unwrap(), "left_mouse");
+		assert_eq!(lua.load("return mouse.right.src").eval::<String>().unwrap(), "mouse");
+
+		// key.one..key.nine resolve to correct values
+		assert_eq!(lua.load("return key.one.val").eval::<String>().unwrap(), "1");
+		assert_eq!(lua.load("return key.four.val").eval::<String>().unwrap(), "4");
 
 		// Table lookups work in bindings
 		lua.load(r#"

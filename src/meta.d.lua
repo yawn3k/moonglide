@@ -126,6 +126,16 @@ con = {}
 ---@field delete string
 ---@field left_meta string
 ---@field right_meta string
+---@field zero string
+---@field one string
+---@field two string
+---@field three string
+---@field four string
+---@field five string
+---@field six string
+---@field seven string
+---@field eight string
+---@field nine string
 key = {}
 
 --- Mouse buttons.

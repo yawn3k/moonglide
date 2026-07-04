@@ -189,13 +189,29 @@ fn handle_btn_up(
 	}
 }
 
+fn extract_helper_key(val: mlua::Value) -> mlua::Result<String> {
+	match val {
+		mlua::Value::Table(t) => {
+			if let Ok(kind) = t.get::<String>("__kind") {
+				if kind == "ref" {
+					return t.get("val");
+				}
+			}
+			Err(mlua::Error::external("expected a key/mouse/con reference"))
+		}
+		mlua::Value::String(s) => Ok(s.to_string_lossy().to_string()),
+		_ => Err(mlua::Error::external("expected a key/mouse/con reference")),
+	}
+}
+
 fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 	let mapper = mapper.clone();
 
 	let wrap_btn = |lua: &Lua, f: fn(&mut Mapper, &str, &str)| -> mlua::Function {
 		let m = mapper.clone();
-		lua.clone().create_function(move |lua, (key,): (String,)| -> mlua::Result<()> {
+		lua.clone().create_function(move |lua, (key_val,): (mlua::Value,)| -> mlua::Result<()> {
 			let btn: String = lua.globals().get("_current_btn").unwrap_or_default();
+			let key = extract_helper_key(key_val)?;
 			f(&mut *m.lock().unwrap(), &btn, &key);
 			Ok(())
 		}).unwrap()
@@ -206,7 +222,8 @@ fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 	{
 		let m = mapper.clone();
 		lua.globals().set("instant", lua.clone()
-			.create_function(move |_, (key, opts): (String, Option<mlua::Table>)| -> mlua::Result<()> {
+			.create_function(move |_, (key_val, opts): (mlua::Value, Option<mlua::Table>)| -> mlua::Result<()> {
+				let key = extract_helper_key(key_val)?;
 				let override_ms = opts.and_then(|t| t.get::<u64>("press_time").ok());
 				m.lock().unwrap().instant_key(&key, override_ms);
 				Ok(())
@@ -219,7 +236,8 @@ fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 	{
 		let m = mapper.clone();
 		lua.globals().set("toggle", lua.clone()
-			.create_function(move |_, (key,): (String,)| -> mlua::Result<()> {
+			.create_function(move |_, (key_val,): (mlua::Value,)| -> mlua::Result<()> {
+				let key = extract_helper_key(key_val)?;
 				m.lock().unwrap().toggle_key(&key);
 				Ok(())
 			}).unwrap()
