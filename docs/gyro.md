@@ -9,7 +9,7 @@ Set a `gyro {}` block in your Lua config:
 ```lua
 gyro {
     mode = "hold_enable",
-    button = "x",
+    button = con.x,
     gyro_sens = 1.0,
     calibration = 45.454,
     in_game_sens = 1.0,

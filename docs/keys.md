@@ -123,6 +123,6 @@ Unrecognized SDL button indices produce `unknown_N` names (use as string literal
 
 `key.a`–`key.z`, `key.0`–`key.9`
 
-## String literals still work
+## String literals are not accepted
 
-The old `"string"` syntax still works for backwards compatibility — `bind.press("a", "space")` does the same thing as `bind.press(con.a, key.space)`. The table approach just gives you autocomplete in editors with LuaLS.
+The old `"string"` syntax is **not supported** — use the table syntax (`con.a`, `key.space`, `mouse.left`) everywhere. This gives you autocomplete in editors with LuaLS support.

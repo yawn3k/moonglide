@@ -20,7 +20,7 @@ Use the built-in tables for autocomplete-friendly names:
 | `key` | Keyboard keys |
 | `mouse` | Mouse buttons |
 
-Old string literals like `"a"` or `"space"` still work, but the table syntax (`con.a`, `key.space`) gives you autocomplete in editors with LuaLS support.
+String literals like `"a"` or `"space"` are **not** accepted — you must use the table syntax (`con.a`, `key.space`, `mouse.left`). This gives you autocomplete in editors with LuaLS support.
 
 ## Event types
 
@@ -50,7 +50,7 @@ end)
 String shorthand auto-wraps as `instant(...)`:
 
 ```lua
-bind.tap(con.x, key.e)  -- same as → function() instant("e") end
+bind.tap(con.x, key.e)  -- same as → function() instant(key.e) end
 ```
 
 ### `bind.hold(button, action, opts?)`
@@ -68,7 +68,7 @@ Does **not** fire on taps (< 180 ms), so tap and hold can coexist on the same bu
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
-bind.hold(con.x, key.r)  -- same as → function() press("r") end
+bind.hold(con.x, key.r)  -- same as → function() press(key.r) end
 ```
 
 ### `bind.release(button, action)`
@@ -87,7 +87,7 @@ end)
 String shorthand auto-wraps as `instant(...)`:
 
 ```lua
-bind.release(con.b, key.left_alt)  -- same as → function() instant("left_alt") end
+bind.release(con.b, key.left_alt)  -- same as → function() instant(key.left_alt) end
 ```
 
 ### `bind.turbo(button, action)`
@@ -111,7 +111,7 @@ bind.chord({con.left_shoulder, con.right_shoulder}, key.f)
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
-bind.chord({con.left_shoulder, con.right_shoulder}, key.f)  -- same as → function() press("f") end
+bind.chord({con.left_shoulder, con.right_shoulder}, key.f)  -- same as → function() press(key.f) end
 ```
 
 ### `bind.double_press(button, action, opts?)`
@@ -127,7 +127,7 @@ end, { window = 300 })
 String shorthand auto-wraps as `instant(...)`:
 
 ```lua
-bind.double_press(con.b, key.tab)  -- same as → function() instant("tab") end
+bind.double_press(con.b, key.tab)  -- same as → function() instant(key.tab) end
 ```
 
 ### `bind.modeshift({modifiers}, action_button, fn)`
@@ -146,7 +146,7 @@ end)
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
-bind.modeshift({con.left_shoulder}, con.x, key.f)  -- same as → function() press("f") end
+bind.modeshift({con.left_shoulder}, con.x, key.f)  -- same as → function() press(key.f) end
 ```
 
 ## Action helpers
