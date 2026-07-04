@@ -382,7 +382,9 @@ pub fn init_bare(
 		let full = if rel.starts_with('/') {
 			rel
 		} else if rel.starts_with("~/") || rel == "~" {
-			let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+			let home = std::env::var("HOME")
+				.or_else(|_| std::env::var("USERPROFILE"))
+				.unwrap_or_else(|_| ".".into());
 			if rel == "~" { home } else { format!("{}/{}", home, &rel[2..]) }
 		} else {
 			rel
@@ -415,11 +417,13 @@ pub fn load(
 	let cb = callbacks.clone();
 	let cfg = config.clone();
 	let gs = gyro_shared.clone();
-	let include_fn = lua.create_function(move |_, rel: String| -> mlua::Result<()> {
+	let 	include_fn = lua.create_function(move |_, rel: String| -> mlua::Result<()> {
 		let full = if rel.starts_with('/') {
 			rel
 		} else if rel.starts_with("~/") || rel == "~" {
-			let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+			let home = std::env::var("HOME")
+				.or_else(|_| std::env::var("USERPROFILE"))
+				.unwrap_or_else(|_| ".".into());
 			if rel == "~" { home } else { format!("{}/{}", home, &rel[2..]) }
 		} else {
 			rel

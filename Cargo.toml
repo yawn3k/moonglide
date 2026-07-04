@@ -2,7 +2,16 @@
 name = "moonglide"
 edition = "2021"
 
-[dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 sdl2 = { version = "0.38", features = ["use-pkgconfig", "hidapi"] }
 mlua = { version = "0.10", features = ["luajit"] }
 uinput = "0.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+sdl2 = { version = "0.38", features = ["bundled", "hidapi"] }
+mlua = { version = "0.10", features = ["lua54"] }
+mlua-sys = { version = "0.6", features = ["vendored"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Foundation",
+] }

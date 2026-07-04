@@ -46,21 +46,16 @@ impl ControllerManager {
 			.num_joysticks()
 			.map_err(|e| format!("num_joysticks: {}", e))?;
 		for id in 0..available {
-			if mgr.sub.is_game_controller(id) {
-				match mgr.sub.open(id) {
-					Ok(c) => {
-						let instance = c.instance_id();
-						if c.has_sensor(sdl2::sensor::SensorType::Gyroscope) {
-							let _ = c.sensor_set_enabled(
-								sdl2::sensor::SensorType::Gyroscope,
-								true,
-							);
+				if mgr.sub.is_game_controller(id) {
+					match mgr.sub.open(id) {
+						Ok(c) => {
+							let instance = c.instance_id();
+							gyro_enable(&c);
+							mgr.controllers.insert(instance, c);
 						}
-						mgr.controllers.insert(instance, c);
+						Err(e) => eprintln!("open controller {}: {}", id, e),
 					}
-					Err(e) => eprintln!("open controller {}: {}", id, e),
 				}
-			}
 		}
 		Ok(mgr)
 	}
@@ -111,12 +106,7 @@ impl ControllerManager {
 			sdl2::event::Event::ControllerDeviceAdded { which, .. } => {
 				if let Ok(c) = self.sub.open(*which) {
 					let instance = c.instance_id();
-					if c.has_sensor(sdl2::sensor::SensorType::Gyroscope) {
-						let _ = c.sensor_set_enabled(
-							sdl2::sensor::SensorType::Gyroscope,
-							true,
-						);
-					}
+					gyro_enable(&c);
 					out.push(ControllerEvent::Connected(instance));
 					self.controllers.insert(instance, c);
 				}
@@ -130,6 +120,12 @@ impl ControllerManager {
 		}
 
 		out
+	}
+}
+
+fn gyro_enable(c: &GameController) {
+	if c.has_sensor(sdl2::sensor::SensorType::Gyroscope) {
+		let _ = c.sensor_set_enabled(sdl2::sensor::SensorType::Gyroscope, true);
 	}
 }
 
