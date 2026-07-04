@@ -18,7 +18,7 @@ While Moonglide is running, type Lua expressions at the terminal. Each expressio
 ```lua
 > left_stick_inner_deadzone = 0.25
 > ok
-> bind.press("guide", "esc")
+> bind.press(con.guide, key.esc)
 > ok
 ```
 
@@ -73,7 +73,7 @@ Useful from the REPL to reload config:
 Or inside a binding as a panic button:
 
 ```lua
-bind.press("guide", function()
+bind.press(con.guide, function()
     reset()
     print("all bindings cleared")
 end)
@@ -86,7 +86,7 @@ Set these in your config or from the REPL:
 | Global | Default | Description |
 |--------|---------|-------------|
 | `hold_press_time` | 400 | Default ms delay for `bind.hold` (overridable per-binding with `{delay=N}`). Read at config load only, not re-read from REPL. |
-| `instant_press_time` | 40 | How long `instant("key")` holds the key before releasing (ms) |
+| `instant_press_time` | 40 | How long `instant(key)` holds the key before releasing (ms) |
 | `double_press_window` | 200 | Default ms window for `bind.double_press` (overridable with `{window=N}`) |
 
 ### `wait(seconds)`
@@ -94,10 +94,10 @@ Set these in your config or from the REPL:
 Yield a binding's coroutine for `seconds` (non-blocking — other bindings still fire during the wait). Useful for timed sequences.
 
 ```lua
-bind.press("y", function()
-    press("f")
+bind.press(con.y, function()
+    press(key.f)
     wait(0.5)
-    instant("e")
+    instant(key.e)
 end)
 ```
 
@@ -106,7 +106,7 @@ end)
 Inside binding callbacks, the read-only variable `_current_btn` holds the button name that triggered the binding:
 
 ```lua
-bind.press("a", function()
+bind.press(con.a, function()
     print("pressed: " .. _current_btn)  -- prints "pressed: a"
 end)
 ```
@@ -120,7 +120,7 @@ end)
 Use `log(level, "msg")` inside binding functions for custom log messages:
 
 ```lua
-bind.press("guide", function()
+bind.press(con.guide, function()
     log(1, "guide button pressed")
 end)
 ```

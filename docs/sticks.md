@@ -10,20 +10,20 @@ Virtual buttons that fire when the stick is pushed in a direction through a cros
 
 | Button | Direction |
 |--------|-----------|
-| `left_stick_up` | Left stick pushed up |
-| `left_stick_down` | Left stick pushed down |
-| `left_stick_left` | Left stick pushed left |
-| `left_stick_right` | Left stick pushed right |
-| `right_stick_up` | Right stick pushed up |
-| `right_stick_down` | Right stick pushed down |
-| `right_stick_left` | Right stick pushed left |
-| `right_stick_right` | Right stick pushed right |
+| `con.left_stick_up` | Left stick pushed up |
+| `con.left_stick_down` | Left stick pushed down |
+| `con.left_stick_left` | Left stick pushed left |
+| `con.left_stick_right` | Left stick pushed right |
+| `con.right_stick_up` | Right stick pushed up |
+| `con.right_stick_down` | Right stick pushed down |
+| `con.right_stick_left` | Right stick pushed left |
+| `con.right_stick_right` | Right stick pushed right |
 
 ```lua
-bind.press("left_stick_up", "w")
-bind.press("left_stick_down", "s")
-bind.press("left_stick_left", "a")
-bind.press("left_stick_right", "d")
+bind.press(con.left_stick_up, key.w)
+bind.press(con.left_stick_down, key.s)
+bind.press(con.left_stick_left, key.a)
+bind.press(con.left_stick_right, key.d)
 ```
 
 ### Cross-gate detection
@@ -40,10 +40,10 @@ Direction is determined by JoyShockMapper's cross-gate method:
 Diagonals activate two adjacent directions. To suppress diagonal bindings, use chords with an empty callback:
 
 ```lua
-bind.chord({"left_stick_up", "left_stick_right"}, "")
-bind.chord({"left_stick_up", "left_stick_left"}, "")
-bind.chord({"left_stick_down", "left_stick_right"}, "")
-bind.chord({"left_stick_down", "left_stick_left"}, "")
+bind.chord({con.left_stick_up, con.left_stick_right}, "")
+bind.chord({con.left_stick_up, con.left_stick_left}, "")
+bind.chord({con.left_stick_down, con.left_stick_right}, "")
+bind.chord({con.left_stick_down, con.left_stick_left}, "")
 ```
 
 ## Deadzones
@@ -74,10 +74,10 @@ Ring buttons are virtual buttons that fire based on stick deflection within the 
 
 | Button | Description |
 |--------|-------------|
-| `left_ring_inner` | Left stick between deadzone and position threshold |
-| `left_ring_outer` | Left stick above position threshold |
-| `right_ring_inner` | Right stick between deadzone and position threshold |
-| `right_ring_outer` | Right stick above position threshold |
+| `con.left_ring_inner` | Left stick between deadzone and position threshold |
+| `con.left_ring_outer` | Left stick above position threshold |
+| `con.right_ring_inner` | Right stick between deadzone and position threshold |
+| `con.right_ring_outer` | Right stick above position threshold |
 
 | Global | Default | Description |
 |--------|---------|-------------|
@@ -86,8 +86,8 @@ Ring buttons are virtual buttons that fire based on stick deflection within the 
 
 ```lua
 left_ring_position = 0.8
-bind.press("left_ring_outer", "r")
-bind.press("left_ring_inner", "lshift")
+bind.press(con.left_ring_outer, key.r)
+bind.press(con.left_ring_inner, key.left_shift)
 ```
 
 The ring uses deadzone-processed stick magnitude (0–1 range):
@@ -111,18 +111,15 @@ trigger_threshold = 5000   -- require deeper press
 
 ### Usage
 
-Trigger names for bindings:
-
-- `left_trigger`
-- `right_trigger`
+Trigger names: `con.left_trigger`, `con.right_trigger`
 
 Triggers generate press/release events like physical buttons (debounced at 50 ms):
 
 ```lua
-bind.press("left_trigger", function()
-    press("left_control")
+bind.press(con.left_trigger, function()
+    press(key.left_control)
 end)
-bind.release("left_trigger", function()
+bind.release(con.left_trigger, function()
     instant("4")
 end)
 ```

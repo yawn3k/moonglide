@@ -6,24 +6,24 @@ Create a `config.lua`:
 
 ```lua
 -- Stick directions as WASD
-bind.press("left_stick_up", "w")
-bind.press("left_stick_down", "s")
-bind.press("left_stick_left", "a")
-bind.press("left_stick_right", "d")
+bind.press(con.left_stick_up, key.w)
+bind.press(con.left_stick_down, key.s)
+bind.press(con.left_stick_left, key.a)
+bind.press(con.left_stick_right, key.d)
 
 -- Face buttons
-bind.press("a", "space")
-bind.tap("x", "left_mouse")
-bind.press("b", function()
-    press("left_control")
-    press("left_shift")
+bind.press(con.a, key.space)
+bind.tap(con.x, mouse.left)
+bind.press(con.b, function()
+    press(key.left_control)
+    press(key.left_shift)
 end)
 
 -- Right stick as arrow keys
-bind.press("right_stick_up", "up")
-bind.press("right_stick_down", "down")
-bind.press("right_stick_left", "left")
-bind.press("right_stick_right", "right")
+bind.press(con.right_stick_up, key.up)
+bind.press(con.right_stick_down, key.down)
+bind.press(con.right_stick_left, key.left)
+bind.press(con.right_stick_right, key.right)
 ```
 
 Run Moonglide with your config:

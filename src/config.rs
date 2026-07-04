@@ -186,6 +186,54 @@ fn setup_dsl(
 
 	globals.set("bind", bind_table).map_err(|e| e.to_string())?;
 
+	// ── con/key/mouse tables ──
+	let set_str = |t: &mlua::Table, k: &str| t.set(k, k).map_err(|e| e.to_string());
+
+	let con = lua.create_table().map_err(|e| e.to_string())?;
+	for name in &[
+		"a", "b", "x", "y",
+		"dpad_up", "dpad_down", "dpad_left", "dpad_right",
+		"left_shoulder", "right_shoulder",
+		"left_stick", "right_stick",
+		"start", "back", "guide",
+		"left_trigger", "right_trigger",
+		"touchpad_click", "touchpad_touch",
+		"misc_1",
+		"paddle_1", "paddle_2", "paddle_3", "paddle_4",
+		"left_stick_up", "left_stick_down", "left_stick_left", "left_stick_right",
+		"right_stick_up", "right_stick_down", "right_stick_left", "right_stick_right",
+		"left_ring_inner", "left_ring_outer",
+		"right_ring_inner", "right_ring_outer",
+	] { set_str(&con, name)?; }
+	globals.set("con", con).map_err(|e| e.to_string())?;
+
+	let key = lua.create_table().map_err(|e| e.to_string())?;
+	for name in &[
+		"esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+		"minus", "equal", "backspace", "tab",
+		"q", "w", "e", "r", "t", "y", "u", "i", "o", "p",
+		"leftbrace", "rightbrace", "enter",
+		"left_control", "a", "s", "d", "f", "g", "h", "j", "k", "l",
+		"semicolon", "apostrophe", "grave",
+		"left_shift", "backslash",
+		"z", "x", "c", "v", "b", "n", "m",
+		"comma", "dot", "slash", "right_shift",
+		"left_alt", "space", "caps_lock",
+		"f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+		"num_lock", "scroll_lock", "right_control",
+		"sysrq", "right_alt",
+		"home", "up", "page_up", "left", "right", "end", "down", "page_down",
+		"insert", "delete",
+		"left_meta", "right_meta",
+	] { set_str(&key, name)?; }
+	globals.set("key", key).map_err(|e| e.to_string())?;
+
+	let mouse = lua.create_table().map_err(|e| e.to_string())?;
+	mouse.set("left", "left_mouse").map_err(|e| e.to_string())?;
+	mouse.set("right", "right_mouse").map_err(|e| e.to_string())?;
+	mouse.set("middle", "middle_mouse").map_err(|e| e.to_string())?;
+	globals.set("mouse", mouse).map_err(|e| e.to_string())?;
+
 	let gs = gyro_shared.clone();
 	let gyro_fn = lua.create_function(move |_, tbl: mlua::Table| {
 		let mode_str: String = tbl.get("mode").unwrap_or_else(|_| "always_on".into());
@@ -432,5 +480,35 @@ mod tests {
 		let cfg = config.lock().unwrap();
 		assert!(!cfg.bindings.is_empty());
 		assert_eq!(cfg.bindings[0].button, "a");
+	}
+
+	#[test]
+	fn test_con_key_mouse_tables() {
+		let lua = Lua::new();
+		let config = Arc::new(Mutex::new(Config::default()));
+		let callbacks = Arc::new(Mutex::new(Vec::new()));
+		let gyro_shared = Arc::new(Mutex::new(GyroConfig::default()));
+		let (cal_tx, _cal_rx) = mpsc::channel();
+		setup_dsl(&lua, &gyro_shared, &cal_tx).unwrap();
+
+		// Table lookups resolve to the correct string
+		assert_eq!(lua.load("return con.a").eval::<String>().unwrap(), "a");
+		assert_eq!(lua.load("return con.left_shoulder").eval::<String>().unwrap(), "left_shoulder");
+		assert_eq!(lua.load("return key.space").eval::<String>().unwrap(), "space");
+		assert_eq!(lua.load("return key.left_control").eval::<String>().unwrap(), "left_control");
+		assert_eq!(lua.load("return mouse.left").eval::<String>().unwrap(), "left_mouse");
+		assert_eq!(lua.load("return mouse.right").eval::<String>().unwrap(), "right_mouse");
+		assert_eq!(lua.load("return mouse.middle").eval::<String>().unwrap(), "middle_mouse");
+
+		// Table lookups work in bindings
+		lua.load(r#"
+			bind.press(con.a, key.space)
+			bind.tap(con.x, mouse.left)
+		"#).exec().unwrap();
+		process_pending(&lua, &mut *callbacks.lock().unwrap(), &config, &gyro_shared).unwrap();
+
+		let cfg = config.lock().unwrap();
+		assert_eq!(cfg.bindings[0].button, "a");
+		assert_eq!(cfg.bindings[1].button, "x");
 	}
 }

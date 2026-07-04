@@ -1,117 +1,128 @@
 # Key & Button Reference
 
+Use these with the built-in tables: `con` for controller, `key` for keyboard, `mouse` for mouse buttons.
+
+```lua
+bind.press(con.a, key.space)
+bind.tap(con.x, mouse.left)
+```
+
 ## Controller buttons
 
-Standard SDL gamepad button names:
+Standard SDL gamepad button names (via `con` table):
 
-| Button | Notes |
-|--------|-------|
-| `a` | |
-| `b` | |
-| `x` | |
-| `y` | |
-| `dpad_up` | |
-| `dpad_down` | |
-| `dpad_left` | |
-| `dpad_right` | |
-| `left_shoulder` | LB |
-| `right_shoulder` | RB |
-| `left_stick` | Stick click (L3) |
-| `right_stick` | Stick click (R3) |
-| `start` | |
-| `back` | Select |
-| `guide` | Home/PS/Xbox button |
-| `left_trigger` | Analog trigger |
-| `right_trigger` | Analog trigger |
-| `touchpad_click` | Physical touchpad press |
-| `touchpad_touch` | Finger on touchpad surface |
-| `misc_1` | Miscellaneous button |
-| `paddle_1` | Rear paddle 1 |
-| `paddle_2` | Rear paddle 2 |
-| `paddle_3` | Rear paddle 3 |
-| `paddle_4` | Rear paddle 4 |
+| Field | Button | Notes |
+|-------|--------|-------|
+| `con.a` | `a` | |
+| `con.b` | `b` | |
+| `con.x` | `x` | |
+| `con.y` | `y` | |
+| `con.dpad_up` | `dpad_up` | |
+| `con.dpad_down` | `dpad_down` | |
+| `con.dpad_left` | `dpad_left` | |
+| `con.dpad_right` | `dpad_right` | |
+| `con.left_shoulder` | `left_shoulder` | LB |
+| `con.right_shoulder` | `right_shoulder` | RB |
+| `con.left_stick` | `left_stick` | Stick click (L3) |
+| `con.right_stick` | `right_stick` | Stick click (R3) |
+| `con.start` | `start` | |
+| `con.back` | `back` | Select |
+| `con.guide` | `guide` | Home/PS/Xbox button |
+| `con.left_trigger` | `left_trigger` | Analog trigger |
+| `con.right_trigger` | `right_trigger` | Analog trigger |
+| `con.touchpad_click` | `touchpad_click` | Physical touchpad press |
+| `con.touchpad_touch` | `touchpad_touch` | Finger on touchpad surface |
+| `con.misc_1` | `misc_1` | Miscellaneous button |
+| `con.paddle_1` | `paddle_1` | Rear paddle 1 |
+| `con.paddle_2` | `paddle_2` | Rear paddle 2 |
+| `con.paddle_3` | `paddle_3` | Rear paddle 3 |
+| `con.paddle_4` | `paddle_4` | Rear paddle 4 |
 
-Unrecognized SDL button indices produce `unknown_N` names (e.g. `unknown_20`).
+Unrecognized SDL button indices produce `unknown_N` names (use as string literals).
 
-## Stick virtual buttons
+## Stick virtual buttons (via `con`)
 
-| Button | Description |
-|--------|-------------|
-| `left_stick_up` | Left stick cross-gate direction |
-| `left_stick_down` | |
-| `left_stick_left` | |
-| `left_stick_right` | |
-| `right_stick_up` | Right stick cross-gate direction |
-| `right_stick_down` | |
-| `right_stick_left` | |
-| `right_stick_right` | |
-| `left_ring_inner` | Left stick between deadzone and ring position |
-| `left_ring_outer` | Left stick above ring position |
-| `right_ring_inner` | Right stick between deadzone and ring position |
-| `right_ring_outer` | Right stick above ring position |
+| Field | Description |
+|-------|-------------|
+| `con.left_stick_up` | Left stick cross-gate direction |
+| `con.left_stick_down` | |
+| `con.left_stick_left` | |
+| `con.left_stick_right` | |
+| `con.right_stick_up` | Right stick cross-gate direction |
+| `con.right_stick_down` | |
+| `con.right_stick_left` | |
+| `con.right_stick_right` | |
+| `con.left_ring_inner` | Left stick between deadzone and ring position |
+| `con.left_ring_outer` | Left stick above ring position |
+| `con.right_ring_inner` | Right stick between deadzone and ring position |
+| `con.right_ring_outer` | Right stick above ring position |
 
-## Mouse buttons
+## Mouse buttons (via `mouse`)
 
-| Name | Description |
-|------|-------------|
-| `left_mouse` | Left click |
-| `right_mouse` | Right click |
-| `middle_mouse` | Middle click |
+| Field | Description |
+|-------|-------------|
+| `mouse.left` | Left click |
+| `mouse.right` | Right click |
+| `mouse.middle` | Middle click |
 
-## Keyboard keys
+## Keyboard keys (via `key`)
 
 ### Modifiers
 
-| Name | Key |
-|------|-----|
-| `left_control` | Left Ctrl |
-| `left_shift` | Left Shift |
-| `left_alt` | Left Alt |
-| `left_meta` | Left Meta/Super/Windows |
-| `right_control` | Right Ctrl |
-| `right_shift` | Right Shift |
-| `right_alt` | Right Alt (AltGr) |
-| `right_meta` | Right Meta/Super |
+| Field | Key |
+|-------|-----|
+| `key.left_control` | Left Ctrl |
+| `key.left_shift` | Left Shift |
+| `key.left_alt` | Left Alt |
+| `key.left_meta` | Left Meta/Super/Windows |
+| `key.right_control` | Right Ctrl |
+| `key.right_shift` | Right Shift |
+| `key.right_alt` | Right Alt (AltGr) |
+| `key.right_meta` | Right Meta/Super |
 
 ### Navigation & editing
 
-| Name | Key |
-|------|-----|
-| `space` | Space |
-| `enter` | Return |
-| `tab` | Tab |
-| `esc` | Escape |
-| `backspace` | Backspace |
-| `delete` | Delete |
-| `insert` | Insert |
-| `home` | Home |
-| `end` | End |
-| `page_up` | Page Up |
-| `page_down` | Page Down |
-| `caps_lock` | Caps Lock |
-| `num_lock` | Num Lock |
-| `scroll_lock` | Scroll Lock |
-| `sysrq` | Print Screen |
-| `minus` | - |
-| `equal` | = |
-| `leftbrace` | [ |
-| `rightbrace` | ] |
-| `semicolon` | ; |
-| `apostrophe` | ' |
-| `grave` | ` |
-| `backslash` | \\ |
-| `comma` | , |
-| `dot` | . |
-| `slash` | / |
+| Field | Key |
+|-------|-----|
+| `key.space` | Space |
+| `key.enter` | Return |
+| `key.tab` | Tab |
+| `key.esc` | Escape |
+| `key.backspace` | Backspace |
+| `key.delete` | Delete |
+| `key.insert` | Insert |
+| `key.home` | Home |
+| `key.end` | End |
+| `key.page_up` | Page Up |
+| `key.page_down` | Page Down |
+| `key.caps_lock` | Caps Lock |
+| `key.num_lock` | Num Lock |
+| `key.scroll_lock` | Scroll Lock |
+| `key.sysrq` | Print Screen |
+| `key.minus` | - |
+| `key.equal` | = |
+| `key.leftbrace` | [ |
+| `key.rightbrace` | ] |
+| `key.semicolon` | ; |
+| `key.apostrophe` | ' |
+| `key.grave` | ` |
+| `key.backslash` | \\ |
+| `key.comma` | , |
+| `key.dot` | . |
+| `key.slash` | / |
 
 ### Arrow keys
 
-`up`, `down`, `left`, `right`
+`key.up`, `key.down`, `key.left`, `key.right`
 
 ### Function keys
 
-`f1` through `f12`
+`key.f1` through `key.f12`
 
 ### Letters and digits
 
-Single character strings: `"a"`–`"z"`, `"0"`–`"9"`
+`key.a`–`key.z`, `key.0`–`key.9`
+
+## String literals still work
+
+The old `"string"` syntax still works for backwards compatibility — `bind.press("a", "space")` does the same thing as `bind.press(con.a, key.space)`. The table approach just gives you autocomplete in editors with LuaLS.

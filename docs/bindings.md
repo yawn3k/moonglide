@@ -8,21 +8,31 @@ Bindings map controller buttons to actions. Each binding has a **button name**, 
 bind.event(button, action, opts?)
 ```
 
-- `button` — a button name string (see [keys.md](keys.md))
-- `action` — a function or a string (auto-wrapped, see below)
+- `button` — a button name from the `con` table (see [keys.md](keys.md))
+- `action` — a function, or a reference from `key`/`mouse` (auto-wrapped, see below)
 - `opts` — optional table with per-binding settings
+
+Use the built-in tables for autocomplete-friendly names:
+
+| Table | What it holds |
+|-------|--------------|
+| `con` | Controller buttons, stick directions, ring zones |
+| `key` | Keyboard keys |
+| `mouse` | Mouse buttons |
+
+Old string literals like `"a"` or `"space"` still work, but the table syntax (`con.a`, `key.space`) gives you autocomplete in editors with LuaLS support.
 
 ## Event types
 
 ### `bind.press(button, action)`
 
-Fires when the button is pressed down. If the action uses `press("key")`, that key stays held until the button is released.
+Fires when the button is pressed down. If the action uses `press(key)`, that key stays held until the button is released.
 
 ```lua
-bind.press("a", "space")              -- string shorthand
-bind.press("b", function()            -- function
-    press("left_control")
-    press("left_shift")
+bind.press(con.a, key.space)              -- string shorthand
+bind.press(con.b, function()              -- function
+    press(key.left_control)
+    press(key.left_shift)
 end)
 ```
 
@@ -31,16 +41,16 @@ end)
 Fires on quick press-release (held < 180 ms). Ignores longer holds so tap and hold can coexist on the same button.
 
 ```lua
-bind.tap("x", "left_mouse")
-bind.tap("y", function()
-    instant("e", { press_time = 20 })
+bind.tap(con.x, mouse.left)
+bind.tap(con.y, function()
+    instant(key.e, { press_time = 20 })
 end)
 ```
 
 String shorthand auto-wraps as `instant(...)`:
 
 ```lua
-bind.tap("x", "e")  -- same as → function() instant("e") end
+bind.tap(con.x, key.e)  -- same as → function() instant("e") end
 ```
 
 ### `bind.hold(button, action, opts?)`
@@ -48,8 +58,8 @@ bind.tap("x", "e")  -- same as → function() instant("e") end
 Fires after the button is held for a delay. Default delay is `hold_press_time` (400 ms). Override per-binding with `{delay = ms}`.
 
 ```lua
-bind.hold("x", function()
-    press("r")      -- reload
+bind.hold(con.x, function()
+    press(key.r)      -- reload
 end, { delay = 800 })
 ```
 
@@ -58,7 +68,7 @@ Does **not** fire on taps (< 180 ms), so tap and hold can coexist on the same bu
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
-bind.hold("x", "r")  -- same as → function() press("r") end
+bind.hold(con.x, key.r)  -- same as → function() press("r") end
 ```
 
 ### `bind.release(button, action)`
@@ -66,18 +76,18 @@ bind.hold("x", "r")  -- same as → function() press("r") end
 Fires when the button is released.
 
 ```lua
-bind.release("left_shoulder", function()
-    release("q")
+bind.release(con.left_shoulder, function()
+    release(key.q)
 end)
-bind.release("b", function()
-    instant("left_alt")
+bind.release(con.b, function()
+    instant(key.left_alt)
 end)
 ```
 
 String shorthand auto-wraps as `instant(...)`:
 
 ```lua
-bind.release("b", "left_alt")  -- same as → function() instant("left_alt") end
+bind.release(con.b, key.left_alt)  -- same as → function() instant("left_alt") end
 ```
 
 ### `bind.turbo(button, action)`
@@ -85,8 +95,8 @@ bind.release("b", "left_alt")  -- same as → function() instant("left_alt") end
 Fires repeatedly at ~100 ms while the button is held.
 
 ```lua
-bind.turbo("right_shoulder", function()
-    instant("left_mouse")
+bind.turbo(con.right_shoulder, function()
+    instant(mouse.left)
 end)
 ```
 
@@ -95,13 +105,13 @@ end)
 Fires when **all** specified buttons are held simultaneously. Individual button press and release bindings for the chorded buttons are suppressed while the chord is active.
 
 ```lua
-bind.chord({"left_shoulder", "right_shoulder"}, "f")
+bind.chord({con.left_shoulder, con.right_shoulder}, key.f)
 ```
 
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
-bind.chord({"left_shoulder", "right_shoulder"}, "f")  -- same as → function() press("f") end
+bind.chord({con.left_shoulder, con.right_shoulder}, key.f)  -- same as → function() press("f") end
 ```
 
 ### `bind.double_press(button, action, opts?)`
@@ -109,15 +119,15 @@ bind.chord({"left_shoulder", "right_shoulder"}, "f")  -- same as → function() 
 Fires when the button is pressed twice within the window. Default window is `double_press_window` (200 ms). Override with `{window = ms}`.
 
 ```lua
-bind.double_press("b", function()
-    instant("tab")
+bind.double_press(con.b, function()
+    instant(key.tab)
 end, { window = 300 })
 ```
 
 String shorthand auto-wraps as `instant(...)`:
 
 ```lua
-bind.double_press("b", "tab")  -- same as → function() instant("tab") end
+bind.double_press(con.b, key.tab)  -- same as → function() instant("tab") end
 ```
 
 ### `bind.modeshift({modifiers}, action_button, fn)`
@@ -127,80 +137,89 @@ bind.double_press("b", "tab")  -- same as → function() instant("tab") end
 If the modifier is pressed *after* the action button is already held, the held button is retroactively consumed so its `bind.release` is also suppressed.
 
 ```lua
-bind.modeshift({"left_trigger", "right_trigger"}, "a", function()
-    press("left_control")
-    instant("z")   -- ctrl+z (undo)
+bind.modeshift({con.left_trigger, con.right_trigger}, con.a, function()
+    press(key.left_control)
+    instant(key.z)   -- ctrl+z (undo)
 end)
 ```
 
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
-bind.modeshift({"left_shoulder"}, "x", "f")  -- same as → function() press("f") end
+bind.modeshift({con.left_shoulder}, con.x, key.f)  -- same as → function() press("f") end
 ```
 
 ## Action helpers
 
-Helpers callable inside binding callbacks to manipulate keyboard, mouse, and controller output.
+Helpers callable inside binding callbacks to manipulate keyboard and mouse output.
 
 Inside any callback, the read-only variable `_current_btn` holds the button name that triggered the binding:
 
 ```lua
-bind.press("a", function()
+bind.press(con.a, function()
     print("triggered by: " .. _current_btn)
 end)
 ```
 
-### `press("key")`
+### `press(key)`
 
 Hold a key down while the binding button is held. The key is automatically released when the button comes up.
 
 ```lua
-bind.press("dpad_up", function()
-    press("w")
+bind.press(con.dpad_up, function()
+    press(key.w)
 end)
 ```
 
-### `instant("key", opts?)`
+### `instant(key, opts?)`
 
 Tap a key — press and release after `instant_press_time` ms (default 40). Pass `{press_time = N}` for a per-key override.
 
 ```lua
-bind.tap("x", function()
-    instant("left_mouse", { press_time = 20 })
+bind.tap(con.x, function()
+    instant(mouse.left, { press_time = 20 })
 end)
 ```
 
-### `release("key")`
+### `release(key)`
 
 Release a key that was previously pressed. Typically used in `bind.release` handlers.
 
 ```lua
-bind.press("dpad_left", function()
-    press("a")
+bind.press(con.dpad_left, function()
+    press(key.a)
 end)
-bind.release("dpad_left", function()
-    release("a")
+bind.release(con.dpad_left, function()
+    release(key.a)
 end)
 ```
 
-### `toggle("key")`
+### `toggle(key)`
 
 Alternate a key between held and released on each press.
 
 ```lua
-bind.tap("start", function()
-    toggle("left_meta")
+bind.tap(con.start, function()
+    toggle(key.left_meta)
 end)
 ```
 
-### `turbo("key")`
+### `turbo(key)`
 
 Rapid-pulse a key at ~100 ms while the binding button is held.
 
 ```lua
-bind.press("right_stick", function()
-    turbo("left_mouse")
+bind.press(con.right_stick, function()
+    turbo(mouse.left)
 end)
 ```
 
+### Calibration
+
+```lua
+bind.press(con.b, function()
+    gyro_calibrate_start()
+    wait(2)
+    gyro_calibrate_stop()
+end)
+```

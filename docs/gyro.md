@@ -26,12 +26,12 @@ gyro {
 | `"hold_disable"` | Gyro active unless `button` is held |
 | `"always_on"` | Gyro always active (default when `mode` is omitted from `gyro {}`) |
 
-If the entire `gyro {}` block is omitted, gyro is off (`GyroMode::Off`).
+If the entire `gyro {}` block is omitted, gyro is off.
 If `gyro {}` is present but `mode` is not specified, it defaults to `"always_on"`.
 
 ## `button`
 
-The activation button. Use any button name (see [keys.md](keys.md)).
+The activation button. Use any button from the `con` table (see [keys.md](keys.md)).
 
 Required unless mode is `"off"`.
 
@@ -62,7 +62,7 @@ Local yaw gyrospace:
 Calibration captures the gyro's resting bias and subtracts it from readings. Use from a binding:
 
 ```lua
-bind.press("b", function()
+bind.press(con.b, function()
     print("calibrating in 1s — hold controller still")
     wait(1)
     gyro_calibrate_start()

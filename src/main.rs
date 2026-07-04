@@ -237,6 +237,32 @@ fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 }
 
 fn main() {
+	let args: Vec<String> = std::env::args().collect();
+	if args.len() >= 2 {
+		match args[1].as_str() {
+			"--gen-meta" => {
+				let path = args.get(2).map(|s| s.as_str()).unwrap_or("moonglide.d.lua");
+				match std::fs::write(path, include_str!("meta.d.lua")) {
+					Ok(_) => {
+						println!("wrote {}", style::info(path));
+						std::process::exit(0);
+					}
+					Err(e) => {
+						eprintln!("{}", style::err(&format!("error writing {}: {}", path, e)));
+						std::process::exit(1);
+					}
+				}
+			}
+			flag if flag.starts_with("--") => {
+				eprintln!("{}", style::err(&format!("unknown flag: {flag}")));
+				eprintln!("usage: moonglide [config.lua]");
+				eprintln!("       moonglide --gen-meta [path]");
+				std::process::exit(1);
+			}
+			_ => {}
+		}
+	}
+
 	let sdl = match sdl2::init() {
 		Ok(s) => s,
 		Err(e) => { eprintln!("{}", style::err(&format!("error: sdl init failed: {}", e))); return; }
