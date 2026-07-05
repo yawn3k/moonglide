@@ -45,3 +45,22 @@ impl VirtualMouse {
         Ok(())
     }
 }
+
+pub fn send_mouse_button(dw_flags: u32) -> Result<(), String> {
+    let mi = MOUSEINPUT {
+        dx: 0,
+        dy: 0,
+        mouseData: 0,
+        dwFlags: dw_flags,
+        time: 0,
+        dwExtraInfo: 0,
+    };
+    let input = INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 { mi },
+    };
+    unsafe {
+        SendInput(1, &input, std::mem::size_of::<INPUT>() as i32);
+    }
+    Ok(())
+}
