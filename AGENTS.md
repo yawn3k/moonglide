@@ -7,10 +7,13 @@ Supports gyro + mouse/keyboard output.
 
 ```bash
 nix develop                     # dev shell (SDL2 + Lua + Rust deps, Linux x86_64)
-cargo build --release
+cargo build --release           # Linux (uinput + LuaJIT)
 cargo run --release                          # no config (defaults only)
 cargo run --release -- ./config.lua          # custom config
 ```
+
+**Windows:** `cargo build --release` (SendInput + bundled SDL2 + Lua 5.4).
+Requires VS Build Tools and CMake. See [docs/getting-started.md](docs/getting-started.md).
 
 ## Testing
 

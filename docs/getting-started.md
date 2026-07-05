@@ -57,3 +57,24 @@ cargo run --release -- ./config.lua  # run with config
 ```
 
 Requires SDL2, LuaJIT, udev, and pkg-config. The `nix develop` command provides all dependencies on Linux x86_64.
+
+## Building on Windows
+
+**Prerequisites:**
+- Rust (from [rustup.rs](https://rustup.rs))
+- Visual Studio 2022 Build Tools with "Desktop development with C++"
+- CMake 3.20+ (`winget install CMake` or from [cmake.org](https://cmake.org))
+
+```bash
+cargo build --release
+cargo run --release
+cargo run --release -- ./config.lua
+```
+
+> If you get a CMake compatibility error, make sure `.cargo/config.toml` exists
+> with `[env] CMAKE_POLICY_VERSION_MINIMUM = "3.5"` — this file is checked into
+> the repo and handled automatically.
+
+On Windows, Moonglide uses `SendInput` for mouse and keyboard output (no driver
+needed) and compiles Lua 5.4 from source. No system-wide dependencies beyond
+the prerequisites above.
