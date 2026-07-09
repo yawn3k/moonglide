@@ -33,6 +33,21 @@ impl Mapper {
 		}
 	}
 
+	/// Called at the start of each frame, before update().
+	/// Releases all keys that were pressed by the previous frame's update().
+	pub fn begin_frame(&mut self) {
+		if let Some(keys) = self.press_held.remove("__frame__") {
+			for k in keys {
+				let still_needed = self.press_held
+					.iter()
+					.any(|(other_btn, ks)| self.held_buttons.contains_key(other_btn.as_str()) && ks.contains(&k));
+				if !still_needed {
+					self.queue_release(&k);
+				}
+			}
+		}
+	}
+
 	pub fn button_down(&mut self, btn: &str, now: Instant) {
 		self.held_buttons.insert(btn.to_string(), now);
 	}
@@ -141,6 +156,14 @@ impl Mapper {
 			.entry(btn.to_string())
 			.or_default()
 			.push(key.to_string());
+		if btn == "__frame__" {
+			let still_needed = self.press_held
+				.iter()
+				.any(|(other_btn, ks)| self.held_buttons.contains_key(other_btn.as_str()) && ks.contains(&key.to_string()));
+			if !still_needed {
+				self.queue_release(key);
+			}
+		}
 	}
 
 	/// Toggle key on/off each call

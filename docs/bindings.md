@@ -214,6 +214,21 @@ bind.press(con.right_stick, function()
 end)
 ```
 
+### `held(button)`
+
+Check if a button is currently held down. Returns `true`/`false`. Useful for conditional logic inside callbacks.
+
+```lua
+bind.press(con.touchpad_touch, function()
+    if held(con.left_shoulder) then
+        -- ADS + gyro: use different sensitivity
+        gyro_enable()
+    else
+        gyro_disable()
+    end
+end)
+```
+
 ### Calibration
 
 ```lua
@@ -223,3 +238,28 @@ bind.press(con.b, function()
     gyro_calibrate_stop()
 end)
 ```
+
+## Per-frame callback
+
+Define `function update()` to run logic every frame (~240 Hz). Inside `update()`, `held()`, `press()`, `release()`, `gyro_enable()`, etc. all work with live controller state.
+
+Keys pressed via `press()` inside `update()` are automatically released on the next frame if `press()` is not called again — no explicit `release()` needed.
+
+```lua
+function update()
+    -- gyro on touchpad touch
+    if held(con.touchpad_touch) then
+        gyro_enable()
+    else
+        gyro_disable()
+    end
+
+    -- movement keys
+    if held(con.left_stick_up) then press(key.w) end
+    if held(con.left_stick_left) then press(key.a) end
+    if held(con.left_stick_down) then press(key.s) end
+    if held(con.left_stick_right) then press(key.q) end
+end
+```
+
+`bind.*` and `update()` coexist — use `bind.press`/`chord`/`modeshift` for event-driven actions, `update()` for stateful conditional logic.

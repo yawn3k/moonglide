@@ -206,6 +206,11 @@ function toggle(key) end
 ---@param key string
 function turbo(key) end
 
+--- Check if a button is currently held.
+---@param button string
+---@return boolean
+function held(button) end
+
 --- The button that triggered the current binding callback.
 ---@type string
 _current_btn = ""

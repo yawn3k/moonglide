@@ -116,7 +116,7 @@ fn parse_sens_pair(val: &mlua::Value) -> (f64, f64) {
 	}
 }
 
-fn setup_dsl(
+pub fn setup_dsl(
 	lua: &Lua,
 	gyro_shared: &std::sync::Arc<std::sync::Mutex<GyroConfig>>,
 	cal_tx: &mpsc::Sender<CalCmd>,
@@ -337,16 +337,11 @@ fn setup_dsl(
 
 
 pub fn init_bare(
+	lua: &Lua,
 	config: &Arc<Mutex<Config>>,
 	callbacks: &Arc<Mutex<Vec<Arc<mlua::RegistryKey>>>>,
 	gyro_shared: &Arc<Mutex<GyroConfig>>,
-) -> (Lua, mpsc::Receiver<CalCmd>) {
-	let lua = Lua::new();
-	let (cal_tx, cal_rx) = mpsc::channel();
-	if let Err(e) = setup_dsl(&lua, gyro_shared, &cal_tx) {
-		eprintln!("warning: setup_dsl failed: {}", e);
-	}
-
+) {
 	let lua2 = lua.clone();
 	let cb = callbacks.clone();
 	let cfg = config.clone();
@@ -370,25 +365,20 @@ pub fn init_bare(
 			.map_err(|e| mlua::Error::external(e))
 	}).expect("create include_fn");
 	lua.globals().set("include", include_fn).expect("set include");
-
-	(lua, cal_rx)
 }
 
 pub fn load(
 	path: &str,
+	lua: &Lua,
 	config: &Arc<Mutex<Config>>,
 	callbacks: &Arc<Mutex<Vec<Arc<mlua::RegistryKey>>>>,
 	gyro_shared: &Arc<Mutex<GyroConfig>>,
-) -> Result<(Config, Lua, mpsc::Receiver<CalCmd>), String> {
-	let lua = Lua::new();
-	let (cal_tx, cal_rx) = mpsc::channel();
-	setup_dsl(&lua, gyro_shared, &cal_tx)?;
-
+) -> Result<Config, String> {
 	let lua2 = lua.clone();
 	let cb = callbacks.clone();
 	let cfg = config.clone();
 	let gs = gyro_shared.clone();
-	let 	include_fn = lua.create_function(move |_, rel: String| -> mlua::Result<()> {
+	let include_fn = lua.create_function(move |_, rel: String| -> mlua::Result<()> {
 		let full = if rel.starts_with('/') {
 			rel
 		} else if rel.starts_with("~/") || rel == "~" {
@@ -421,7 +411,7 @@ pub fn load(
 	let mut final_cfg = config.lock().unwrap().clone();
 	final_cfg.gyro = gyro;
 
-	Ok((final_cfg, lua, cal_rx))
+	Ok(final_cfg)
 }
 
 fn process_pending(

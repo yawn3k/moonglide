@@ -208,10 +208,11 @@ fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>, gyro_tx: Sender<
 
 	let wrap_btn = |lua: &Lua, f: fn(&mut Mapper, &str, &str)| -> mlua::Function {
 		let m = mapper.clone();
-		lua.clone().create_function(move |lua, (key_val,): (mlua::Value,)| -> mlua::Result<()> {
-			let btn: String = lua.globals().get("_current_btn").unwrap_or_default();
+		lua.clone()		.create_function(move |lua, (key_val,): (mlua::Value,)| -> mlua::Result<()> {
+			let raw_btn: String = lua.globals().get("_current_btn").unwrap_or_default();
+			let btn: &str = if raw_btn.is_empty() { "__frame__" } else { &raw_btn };
 			let key = extract_helper_key(key_val)?;
-			f(&mut *m.lock().unwrap(), &btn, &key);
+			f(&mut *m.lock().unwrap(), btn, &key);
 			Ok(())
 		}).unwrap()
 	};
@@ -244,6 +245,17 @@ fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>, gyro_tx: Sender<
 	}
 
 	lua.globals().set("turbo", wrap_btn(lua, |m, btn, key| m.turbo_key(btn, key, Instant::now()))).unwrap();
+
+	{
+		let m = mapper.clone();
+		lua.globals().set("held", lua.clone()
+			.create_function(move |_, (key_val,): (mlua::Value,)| -> mlua::Result<bool> {
+				let key = extract_helper_key(key_val)?;
+				let held = m.lock().unwrap().held_buttons();
+				Ok(held.contains(&key))
+			}).unwrap()
+		).unwrap();
+	}
 
 	lua.globals().set("log", lua.clone()
 		.create_function(|_, (level, msg): (u8, String)| -> mlua::Result<()> {
@@ -321,31 +333,41 @@ fn main() {
 		Err(e) => { eprintln!("{}", style::err(&format!("error: game controller subsystem: {}", e))); return; }
 	};
 
+	let lua = Lua::new();
+
 	let shared_cfg = Arc::new(Mutex::new(Config::default()));
 	let shared_cbs: Arc<Mutex<Vec<Arc<RegistryKey>>>> = Arc::new(Mutex::new(Vec::new()));
 	let gyro_shared: Arc<Mutex<GyroConfig>> = Arc::new(Mutex::new(GyroConfig::default()));
+	let (cal_tx, cal_rx) = std::sync::mpsc::channel::<CalCmd>();
 	let (gyro_tx, gyro_rx) = std::sync::mpsc::channel::<GyroCmd>();
 
-	let (cfg, lua, cal_rx): (Config, Lua, Receiver<CalCmd>) =
-		match std::env::args().nth(1) {
-			Some(path) => match config::load(&path, &shared_cfg, &shared_cbs, &gyro_shared) {
-				Ok(r) => {
-					println!("{}", style::info(&format!("config loaded from {}: {} bindings, {} chords",
-						path, r.0.bindings.len(), r.0.chords.len())));
-					r
-				}
-				Err(e) => {
-					eprintln!("{}", style::warn(&format!("warning: config error ({}), running with empty config", e)));
-					let (lua, cal_rx) = config::init_bare(&shared_cfg, &shared_cbs, &gyro_shared);
-					(Config::default(), lua, cal_rx)
-				}
-			},
-			None => {
-				println!("{}", style::warn("no config specified, running with empty config"));
-				let (lua, cal_rx) = config::init_bare(&shared_cfg, &shared_cbs, &gyro_shared);
-				(Config::default(), lua, cal_rx)
+	let mapper = Arc::new(Mutex::new(Mapper::new()));
+
+	if let Err(e) = config::setup_dsl(&lua, &gyro_shared, &cal_tx) {
+		eprintln!("{}", style::err(&format!("setup_dsl: {}", e)));
+		return;
+	}
+	register_lua_helpers(&lua, &mapper, gyro_tx);
+
+	let cfg: Config = match std::env::args().nth(1) {
+		Some(path) => match config::load(&path, &lua, &shared_cfg, &shared_cbs, &gyro_shared) {
+			Ok(cfg) => {
+				println!("{}", style::info(&format!("config loaded from {}: {} bindings, {} chords",
+					path, cfg.bindings.len(), cfg.chords.len())));
+				cfg
 			}
-		};
+			Err(e) => {
+				eprintln!("{}", style::warn(&format!("warning: config error ({}), running with empty config", e)));
+				config::init_bare(&lua, &shared_cfg, &shared_cbs, &gyro_shared);
+				Config::default()
+			}
+		},
+		None => {
+			println!("{}", style::warn("no config specified, running with empty config"));
+			config::init_bare(&lua, &shared_cfg, &shared_cbs, &gyro_shared);
+			Config::default()
+		}
+	};
 
 	let mut ctrl_mgr = match controller::ControllerManager::open(game_controller_subsys) {
 		Ok(m) => { println!("{}", style::info(&format!("{} controller(s) found at startup", m.controllers.len()))); m }
@@ -354,10 +376,6 @@ fn main() {
 
 	let mouse = VirtualMouse::new().ok();
 	let kbd = VirtualKeyboard::new().ok();
-
-	let mapper = Arc::new(Mutex::new(Mapper::new()));
-
-	register_lua_helpers(&lua, &mapper, gyro_tx);
 
 	let read_dz = |name: &str, def: f64| -> u16 {
 		((lua.globals().get::<f64>(name).unwrap_or(def)).clamp(0.0, 1.0) * MAX_AXIS) as u16
@@ -521,6 +539,18 @@ fn main() {
 		{
 			let held = state.mapper.lock().unwrap().held_buttons();
 			state.gyro.process_hold(&held);
+		}
+
+		state.mapper.lock().unwrap().begin_frame();
+
+		{
+			let lua_globals = lua.globals();
+			if let Ok(update_fn) = lua_globals.get::<mlua::Function>("update") {
+				let _ = lua_globals.set("_current_btn", "__frame__");
+				let _ = lua.create_thread(update_fn)
+					.and_then(|t| t.resume::<mlua::MultiValue>(()));
+				let _ = lua_globals.set("_current_btn", "");
+			}
 		}
 
 		let cbs = shared_cbs.lock().unwrap().clone();
