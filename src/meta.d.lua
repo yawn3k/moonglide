@@ -145,10 +145,8 @@ key = {}
 ---@field middle string
 mouse = {}
 
---- Gyro configuration.
+--- Gyro sensitivity configuration.
 ---@class gyro_config
----@field mode? string "off" | "toggle" | "hold_enable" | "hold_disable" | "always_on"
----@field button? string
 ---@field sensitivity? number|number[]
 ---@field gyro_sens? number|number[]
 ---@field calibration? number
@@ -161,6 +159,15 @@ function gyro(cfg) end
 function gyro_calibrate_start() end
 --- Stop gyro calibration and apply bias.
 function gyro_calibrate_stop() end
+
+--- Enable gyro (from a binding callback).
+function gyro_enable() end
+--- Disable gyro (from a binding callback).
+function gyro_disable() end
+--- Toggle gyro on/off (from a binding callback).
+function gyro_toggle() end
+--- Enable gyro while the current binding's button is held.
+function gyro_hold() end
 
 --- Load additional config file.
 ---@param path string

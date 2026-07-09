@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use mlua::prelude::*;
 
-use crate::bindings::{Binding, BindingEvent, ChordBinding, Config, DoublePressBinding, GyroConfig, GyroMode, ModeshiftBinding};
+use crate::bindings::{Binding, BindingEvent, ChordBinding, Config, DoublePressBinding, GyroConfig, ModeshiftBinding};
 
 pub enum CalCmd {
 	Start,
@@ -300,37 +300,12 @@ fn setup_dsl(
 
 	let gs = gyro_shared.clone();
 	let gyro_fn = lua.create_function(move |_, tbl: mlua::Table| {
-		let mode_str: String = tbl.get("mode").unwrap_or_else(|_| "always_on".into());
-		let mode = match mode_str.as_str() {
-			"off" => GyroMode::Off,
-			"toggle" => GyroMode::Toggle,
-			"hold_enable" => GyroMode::HoldEnable,
-			"hold_disable" => GyroMode::HoldDisable,
-			_ => GyroMode::AlwaysOn,
-		};
-		let btn: Option<String> = match tbl.get::<mlua::Value>("button") {
-			Ok(mlua::Value::Table(t)) => {
-				if let Ok(kind) = t.get::<String>("__kind") {
-					if kind == "ref" {
-						t.get::<String>("val").ok()
-					} else {
-						None
-					}
-				} else {
-					None
-				}
-			}
-			Ok(mlua::Value::String(s)) => Some(s.to_string_lossy().to_string()),
-			_ => None,
-		};
 		let sens_val: mlua::Value = tbl.get("sensitivity").unwrap_or(mlua::Value::Number(1.0));
 		let gyro_val: mlua::Value = tbl.get("gyro_sens").unwrap_or(sens_val);
 		let (sens_h, sens_v) = parse_sens_pair(&gyro_val);
 		let calibration: f64 = tbl.get("calibration").unwrap_or(45.454);
 		let in_game_sens: f64 = tbl.get("in_game_sens").unwrap_or(1.0);
 		let mut g = gs.lock().unwrap();
-		g.mode = mode;
-		g.button = btn;
 		g.calibration = calibration;
 		g.sens_h = sens_h;
 		g.sens_v = sens_v;
@@ -368,8 +343,6 @@ pub fn init_bare(
 ) -> (Lua, mpsc::Receiver<CalCmd>) {
 	let lua = Lua::new();
 	let (cal_tx, cal_rx) = mpsc::channel();
-	gyro_shared.lock().unwrap().mode = GyroMode::Off;
-
 	if let Err(e) = setup_dsl(&lua, gyro_shared, &cal_tx) {
 		eprintln!("warning: setup_dsl failed: {}", e);
 	}
@@ -409,8 +382,6 @@ pub fn load(
 ) -> Result<(Config, Lua, mpsc::Receiver<CalCmd>), String> {
 	let lua = Lua::new();
 	let (cal_tx, cal_rx) = mpsc::channel();
-	gyro_shared.lock().unwrap().mode = GyroMode::Off;
-
 	setup_dsl(&lua, gyro_shared, &cal_tx)?;
 
 	let lua2 = lua.clone();
@@ -441,8 +412,7 @@ pub fn load(
 	lua.load(&src).exec().map_err(|e| format!("lua exec: {}", e))?;
 
 	if let Ok(thresh) = lua.globals().get::<u16>("trigger_threshold") {
-		let mut g = gyro_shared.lock().unwrap();
-		g.trigger_threshold = thresh;
+		crate::TRIGGER_THRESHOLD.store(thresh, std::sync::atomic::Ordering::Relaxed);
 	}
 
 	process_pending(&lua, &mut *callbacks.lock().unwrap(), config, gyro_shared)?;

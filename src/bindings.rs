@@ -35,20 +35,8 @@ pub struct ModeshiftBinding {
 	pub func_idx: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GyroMode {
-	Off,
-	Toggle,
-	HoldEnable,
-	HoldDisable,
-	AlwaysOn,
-}
-
 #[derive(Debug, Clone)]
 pub struct GyroConfig {
-	pub mode: GyroMode,
-	pub button: Option<String>,
-	pub trigger_threshold: u16,
 	pub calibration: f64,
 	pub sens_h: f64,
 	pub sens_v: f64,
@@ -58,15 +46,19 @@ pub struct GyroConfig {
 impl Default for GyroConfig {
 	fn default() -> Self {
 		Self {
-			mode: GyroMode::Off,
-			button: None,
-			trigger_threshold: 3000,
 			calibration: 45.454,
 			sens_h: 1.0,
 			sens_v: 1.0,
 			in_game_sens: 1.0,
 		}
 	}
+}
+
+pub enum GyroCmd {
+	Enable,
+	Disable,
+	Toggle,
+	Hold(String),
 }
 
 #[derive(Debug, Clone)]

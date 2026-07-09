@@ -7,7 +7,6 @@ use std::time::Instant;
 use mlua::{Lua, RegistryKey};
 
 use crate::bindings::{BindingEvent, Config};
-use crate::gyro_state::GyroState;
 use crate::log_msg;
 use crate::lua_coroutines::{execute_lua_function, PendingThread};
 use crate::mapping::Mapper;
@@ -57,7 +56,6 @@ pub fn process_stick_buttons(
 	cfg: &Config,
 	callbacks: &[Arc<RegistryKey>],
 	lua: &Lua,
-	gyro_state: &mut GyroState,
 	mapper: &Arc<Mutex<Mapper>>,
 	dev: &mut OutputDevices,
 	pending: &mut Vec<PendingThread>,
@@ -113,7 +111,6 @@ pub fn process_stick_buttons(
 
 		for dir in &new_dirs {
 			log_msg(1, &format!(">> press {}", dir));
-			gyro_state.button_down(dir);
 			mapper.lock().unwrap().button_down(dir, now);
 		}
 
@@ -153,7 +150,6 @@ pub fn process_stick_buttons(
 			if !current.contains(dir.as_str()) {
 				log_msg(1, &format!("<< release {}", dir));
 				let _ = lua.globals().set("_current_btn", dir.clone());
-				gyro_state.button_up(dir);
 				if mapper.lock().unwrap().is_tap(dir, now) {
 					for b in &cfg.bindings {
 						if b.button == *dir && b.event == BindingEvent::Tap {

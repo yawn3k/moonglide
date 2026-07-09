@@ -4,36 +4,45 @@ Gyro maps controller rotation to mouse movement.
 
 ## Config
 
-Set a `gyro {}` block in your Lua config:
+Set a `gyro {}` block in your Lua config to tune sensitivity:
 
 ```lua
 gyro {
-    mode = "hold_enable",
-    button = con.x,
     gyro_sens = 1.0,
     calibration = 45.454,
     in_game_sens = 1.0,
 }
 ```
 
-## Modes
+If the `gyro {}` block is omitted, gyro is off.
 
-| Mode | Behavior |
-|------|----------|
-| `"off"` | Gyro disabled |
-| `"toggle"` | Press `button` to toggle gyro on/off |
-| `"hold_enable"` | Gyro active only while `button` is held |
-| `"hold_disable"` | Gyro active unless `button` is held |
-| `"always_on"` | Gyro always active (default when `mode` is omitted from `gyro {}`) |
+## Activation
 
-If the entire `gyro {}` block is omitted, gyro is off.
-If `gyro {}` is present but `mode` is not specified, it defaults to `"always_on"`.
+Gyro is activated from bindings using dedicated helpers. Wire them to any button via `bind.press`, `bind.chord`, `bind.modeshift`, etc.:
 
-## `button`
+```lua
+bind.press(con.l_trigger, gyro_enable)
+bind.release(con.l_trigger, gyro_disable)
+```
 
-The activation button. Use any button from the `con` table (see [keys.md](keys.md)).
+Or toggle:
 
-Required unless mode is `"off"`.
+```lua
+bind.press(con.x, gyro_toggle)
+```
+
+| Helper | Behavior |
+|--------|----------|
+| `gyro_enable()` | Enable gyro |
+| `gyro_disable()` | Disable gyro, zero accumulated motion |
+| `gyro_toggle()` | Toggle gyro on/off |
+| `gyro_hold()` | Enable gyro while the current button is held (auto-disables on release) |
+
+### Hold example
+
+```lua
+bind.press(con.touchpad_touch, gyro_hold)
+```
 
 ## Sensitivity
 

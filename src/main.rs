@@ -20,7 +20,7 @@ use mlua::{Lua, RegistryKey};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-use bindings::{BindingEvent, Config, GyroConfig};
+use bindings::{BindingEvent, Config, GyroCmd, GyroConfig};
 use config::CalCmd;
 use controller::{idx_to_button_name, ControllerEvent};
 use gyro_state::GyroState;
@@ -51,6 +51,7 @@ struct OutputState {
 	defer_map: HashMap<String, (Instant, usize)>,
 	pending: Vec<PendingThread>,
 	cfg: Config,
+	gyro_rx: std::sync::mpsc::Receiver<GyroCmd>,
 }
 
 fn handle_btn_down(
@@ -60,7 +61,6 @@ fn handle_btn_down(
 	lua: &Lua,
 ) {
 	log_msg(1, &format!("{} down", name));
-	state.gyro.button_down(name);
 	let now = Instant::now();
 
 	let held = state.mapper.lock().unwrap().held_buttons();
@@ -140,7 +140,6 @@ fn handle_btn_up(
 	lua: &Lua,
 ) {
 	log_msg(1, &format!("{} up", name));
-	state.gyro.button_up(name);
 	let now = Instant::now();
 
 	let consumed = {
@@ -204,7 +203,7 @@ fn extract_helper_key(val: mlua::Value) -> mlua::Result<String> {
 	}
 }
 
-fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
+fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>, gyro_tx: Sender<GyroCmd>) {
 	let mapper = mapper.clone();
 
 	let wrap_btn = |lua: &Lua, f: fn(&mut Mapper, &str, &str)| -> mlua::Function {
@@ -252,6 +251,32 @@ fn register_lua_helpers(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 			Ok(())
 		}).unwrap()
 	).unwrap();
+
+	let gt = gyro_tx.clone();
+	lua.globals().set("gyro_enable", lua.clone().create_function(move |_, ()| {
+		gt.send(GyroCmd::Enable).ok();
+		Ok(())
+	}).unwrap()).unwrap();
+
+	let gt = gyro_tx.clone();
+	lua.globals().set("gyro_disable", lua.clone().create_function(move |_, ()| {
+		gt.send(GyroCmd::Disable).ok();
+		Ok(())
+	}).unwrap()).unwrap();
+
+	let gt = gyro_tx.clone();
+	lua.globals().set("gyro_toggle", lua.clone().create_function(move |_, ()| {
+		gt.send(GyroCmd::Toggle).ok();
+		Ok(())
+	}).unwrap()).unwrap();
+
+	let gt = gyro_tx.clone();
+	let hold_lua = lua.clone();
+	lua.globals().set("gyro_hold", lua.clone().create_function(move |_, ()| {
+		let btn: String = hold_lua.globals().get("_current_btn").unwrap_or_default();
+		gt.send(GyroCmd::Hold(btn)).ok();
+		Ok(())
+	}).unwrap()).unwrap();
 }
 
 fn main() {
@@ -299,6 +324,7 @@ fn main() {
 	let shared_cfg = Arc::new(Mutex::new(Config::default()));
 	let shared_cbs: Arc<Mutex<Vec<Arc<RegistryKey>>>> = Arc::new(Mutex::new(Vec::new()));
 	let gyro_shared: Arc<Mutex<GyroConfig>> = Arc::new(Mutex::new(GyroConfig::default()));
+	let (gyro_tx, gyro_rx) = std::sync::mpsc::channel::<GyroCmd>();
 
 	let (cfg, lua, cal_rx): (Config, Lua, Receiver<CalCmd>) =
 		match std::env::args().nth(1) {
@@ -331,7 +357,7 @@ fn main() {
 
 	let mapper = Arc::new(Mutex::new(Mapper::new()));
 
-	register_lua_helpers(&lua, &mapper);
+	register_lua_helpers(&lua, &mapper, gyro_tx);
 
 	let read_dz = |name: &str, def: f64| -> u16 {
 		((lua.globals().get::<f64>(name).unwrap_or(def)).clamp(0.0, 1.0) * MAX_AXIS) as u16
@@ -361,6 +387,7 @@ fn main() {
 		defer_map: HashMap::new(),
 		pending: Vec::new(),
 		cfg,
+		gyro_rx,
 	};
 
 	println!("{}", style::bold("Moonglide running. Press Escape to quit."));
@@ -423,7 +450,6 @@ fn main() {
 						handle_btn_up(&name, &mut state, &shared_cbs.lock().unwrap().clone(), &lua);
 					}
 				}
-						state.gyro.axis_motion(idx, val);
 					}
 					ControllerEvent::ButtonDown(btn_idx) => {
 						handle_btn_down(&idx_to_button_name(btn_idx), &mut state, &shared_cbs.lock().unwrap().clone(), &lua);
@@ -483,10 +509,24 @@ fn main() {
 			}
 		}
 
+		for cmd in state.gyro_rx.try_iter() {
+			match cmd {
+				GyroCmd::Enable => state.gyro.enable(),
+				GyroCmd::Disable => state.gyro.disable(),
+				GyroCmd::Toggle => state.gyro.toggle(),
+				GyroCmd::Hold(btn) => state.gyro.set_hold(btn),
+			}
+		}
+
+		{
+			let held = state.mapper.lock().unwrap().held_buttons();
+			state.gyro.process_hold(&held);
+		}
+
 		let cbs = shared_cbs.lock().unwrap().clone();
 		process_stick_buttons(
 			&state.axis_state, &mut state.prev_stick_dirs, &state.cfg, &cbs,
-			&lua, &mut state.gyro, &state.mapper, &mut state.dev, &mut state.pending,
+			&lua, &state.mapper, &mut state.dev, &mut state.pending,
 		);
 		process_hold_turbo(&state.cfg, &cbs, &lua, &state.mapper, &mut state.pending);
 
