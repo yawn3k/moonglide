@@ -166,6 +166,12 @@ function on_btn_up(btn)
 end
 
 function on_update()
+	-- gyro hold check
+	if gyro_state.hold_button and not _is_held(gyro_state.hold_button) then
+		gyro_state.active = false
+		gyro_state.hold_button = nil
+	end
+
 	-- clear frame-scoped keys from previous frame
 	for k, _ in pairs(frame_keys) do
 		_release_key(k)

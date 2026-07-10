@@ -1,9 +1,6 @@
 mod api;
-mod types;
 mod config;
 mod controller;
-mod gyro;
-mod gyro_state;
 mod lua_coroutines;
 mod mapping;
 mod output;
@@ -21,10 +18,7 @@ use mlua::Lua;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-use types::{Config, GyroCmd, GyroConfig};
-use config::CalCmd;
 use controller::{idx_to_button_name, ControllerEvent};
-use gyro_state::GyroState;
 use lua_coroutines::{call_on_btn_down, call_on_btn_up, poll_pending_threads, resume_thread, PendingThread};
 use mapping::Mapper;
 use output::keyboard::VirtualKeyboard;
@@ -42,9 +36,7 @@ pub(crate) fn log_msg(level: u8, msg: &str) {
 struct OutputState {
 	dev: OutputDevices,
 	mapper: Arc<Mutex<Mapper>>,
-	gyro: GyroState,
 	axis_state: HashMap<u32, [i16; 6]>,
-	gyro_rx: std::sync::mpsc::Receiver<GyroCmd>,
 }
 
 fn main() {
@@ -91,37 +83,26 @@ fn main() {
 
 	let lua = Lua::new();
 
-	let gyro_shared: Arc<Mutex<GyroConfig>> = Arc::new(Mutex::new(GyroConfig::default()));
-	let (cal_tx, cal_rx) = std::sync::mpsc::channel::<CalCmd>();
-	let (gyro_tx, gyro_rx) = std::sync::mpsc::channel::<GyroCmd>();
-
 	let mapper = Arc::new(Mutex::new(Mapper::new()));
 
-	api::register_api(&lua, &mapper, &gyro_tx);
+	api::register_api(&lua, &mapper);
 
-	// ── setup DSL + bindings library ──
-	if let Err(e) = config::setup_dsl(&lua, &gyro_shared, &cal_tx) {
+	if let Err(e) = config::setup_dsl(&lua) {
 		eprintln!("{}", style::err(&format!("setup_dsl: {}", e)));
 		return;
 	}
 
-	// ── load config ──
-	let cfg: Config = match std::env::args().nth(1) {
-		Some(path) => match config::load(&path, &lua, &Arc::new(Mutex::new(Config::default())), &gyro_shared) {
-			Ok(cfg) => {
-				println!("{}", style::info(&format!("config loaded from {}", path)));
-				cfg
-			}
+	match std::env::args().nth(1) {
+		Some(path) => match config::load(&path, &lua) {
+			Ok(()) => println!("{}", style::info(&format!("config loaded from {}", path))),
 			Err(e) => {
 				eprintln!("{}", style::warn(&format!("warning: config error ({}), running with empty config", e)));
-				config::init_bare(&lua, &Arc::new(Mutex::new(Config::default())), &gyro_shared);
-				Config::default()
+				config::init_bare(&lua);
 			}
 		},
 		None => {
 			println!("{}", style::warn("no config specified, running with empty config"));
-			config::init_bare(&lua, &Arc::new(Mutex::new(Config::default())), &gyro_shared);
-			Config::default()
+			config::init_bare(&lua);
 		}
 	};
 
@@ -142,9 +123,7 @@ fn main() {
 	let mut state = OutputState {
 		dev: OutputDevices { mouse, kbd },
 		mapper,
-		gyro: GyroState::new(&cfg.gyro),
 		axis_state: HashMap::new(),
-		gyro_rx,
 	};
 
 	println!("{}", style::bold("Moonglide running. Press Escape to quit."));
@@ -197,11 +176,24 @@ fn main() {
 					ControllerEvent::TouchpadUntouch => {
 						handle_btn_up("touchpad_touch", &mut state, &lua, &mut pending);
 					}
-					ControllerEvent::Gyro { x, y, z } => state.gyro.process_gyro(x, y, z, &mut state.dev),
+					ControllerEvent::Gyro { x, y, z } => {
+						if let Ok(f) = lua.globals().get::<mlua::Function>("process_gyro") {
+							match f.call::<mlua::Table>((x as f64, y as f64, z as f64)) {
+								Ok(result) => {
+									let dx: f64 = result.get("dx").unwrap_or(0.0);
+									let dy: f64 = result.get("dy").unwrap_or(0.0);
+									if (dx != 0.0 || dy != 0.0) && state.dev.mouse.is_some() {
+										let _ = state.dev.mouse.as_mut().unwrap().move_mouse(dx, dy);
+									}
+								}
+								Err(e) => log_msg(2, &format!("process_gyro: {}", e)),
+							}
+						}
+					}
 					ControllerEvent::Connected(id) => println!("{}", style::green(&format!("controller connected (instance {})", id))),
 					ControllerEvent::Disconnected(id) => {
 						println!("{}", style::yellow(&format!("controller disconnected (instance {})", id)));
-						state.gyro.reset();
+						let _ = lua.globals().get::<mlua::Function>("gyro_reset").map(|f| f.call::<()>(()));
 						state.axis_state.remove(&id);
 					}
 				}
@@ -216,27 +208,6 @@ fn main() {
 				}
 				Err(e) => eprintln!("{}", style::err(&format!("> error: {}", e))),
 			}
-		}
-
-		while let Ok(cmd) = cal_rx.try_recv() {
-			match cmd {
-				CalCmd::Start => state.gyro.start_calibration(),
-				CalCmd::Stop => state.gyro.stop_calibration(),
-			}
-		}
-
-		for cmd in state.gyro_rx.try_iter() {
-			match cmd {
-				GyroCmd::Enable => state.gyro.enable(),
-				GyroCmd::Disable => state.gyro.disable(),
-				GyroCmd::Toggle => state.gyro.toggle(),
-				GyroCmd::Hold(btn) => state.gyro.set_hold(btn),
-			}
-		}
-
-		{
-			let held = state.mapper.lock().unwrap().held_buttons();
-			state.gyro.process_hold(&held);
 		}
 
 		// ── process stick directions ──

@@ -26,20 +26,23 @@ cargo test <name>             # single test by name
 
 ```
 src/
-├── main.rs            — SDL init, event loop, Lua config load, gyro state machine
-├── config.rs          — mlua → Rust binding definitions (DSL setup)
-├── bindings.rs        — Binding/Action enums, GyroConfig structs
+├── main.rs            — SDL init, event loop, Lua config load, Lua gyro invocation
+├── config.rs          — loads Lua scripts (tables/bindings/sticks/gyro/events)
+├── api.rs             — Lua ↔ Rust glue functions (_press_key, _is_held, log, etc.)
 ├── mapping.rs         — Mapper: button state → active keyboard/mouse output
 ├── controller.rs      — SDL controller open/close/sensor events → ControllerEvent
-├── gyro.rs            — GyroProcessor: bias subtraction, RWS angle calculation
-├── gyro_state.rs      — GyroState: mode management, calibration, gyro → mouse
 ├── lua_coroutines.rs  — PendingThread, execute/poll Lua coroutines
-├── output_devices.rs  — OutputDevices (mouse+kbd), TriggerTracker
-├── stick.rs           — Deadzones, cross-gate detection, ring position logic
+├── output_devices.rs  — OutputDevices (mouse+kbd)
 ├── style.rs           — ANSI escape helpers for console output
-└── output/
-    ├── mouse.rs       — uinput mouse (relative move, buttons)
-    └── keyboard.rs    — uinput keyboard (key map, mouse button helpers)
+├── output/
+│   ├── mouse.rs       — uinput mouse (relative move, buttons)
+│   └── keyboard.rs    — uinput keyboard (key map, mouse button helpers)
+└── lua/
+    ├── tables.lua     — con/key/mouse typed ref tables
+    ├── bindings.lua   — bind.* DSL, press/release/instant/toggle/held/wait
+    ├── sticks.lua     — process_sticks (deadzone, cross-gate, ring, triggers)
+    ├── gyro.lua       — process_gyro (RWS math, bias, calibration, enable/disable)
+    └── events.lua     — on_btn_down/up/update callbacks (chords, DP, modeshift, etc.)
 ```
 
 ### Key Dependencies
@@ -55,11 +58,10 @@ src/
                   │
 SDL events → ControllerManager → ControllerEvent enum → match in main loop
                   │                                          │
-            AxisMotion ──→ TriggerTracker (press/release) ──→ handle_btn_down/up
+            AxisMotion ──→ process_sticks (Lua) ────────────→ handle_btn_down/up
                   │                                          │
-                  └──→ GyroState.axis_motion                 │
-                       GyroState.process_gyro → dev.mouse     │
-                                                              ▼
+                  └──→ process_gyro (Lua) → dev.mouse        │
+                                                               ▼
                    ┌──────────────────────────────────────────┐
                    │  handle_btn_down / handle_btn_up         │
                    │  • Chord check → fire chord or continue  │
@@ -152,13 +154,13 @@ Internally:
 - Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias
 - Trigger-based gyro activation uses `axis_motion()` to read raw axis value vs `trigger_threshold`, bypassing the button event system
 
-See `gyro.rs` and `gyro_state.rs` for implementation.
+See `src/lua/gyro.lua` for implementation.
 
 ## Triggers
 
 See [docs/sticks.md](docs/sticks.md#triggers) for trigger usage and configuration.
 
-Internally: analog triggers (SDL axes 105/106) are handled by `TriggerTracker` in `output_devices.rs`. State tracked per controller instance, crosses threshold → generates `ButtonDown`/`ButtonUp` events → routed through `handle_btn_down`/`handle_btn_up`. Debounced at 50ms.
+Internally: analog triggers (SDL axes 105/106) are handled by `TriggerTracker` in `sticks.lua`. State tracked per controller instance, crosses threshold → generates `ButtonDown`/`ButtonUp` events → routed through `handle_btn_down`/`handle_btn_up`. Debounced at 50ms.
 
 ## Output Devices (output_devices.rs)
 
@@ -168,7 +170,7 @@ Internally: analog triggers (SDL axes 105/106) are handled by `TriggerTracker` i
 
 ## Stick Statics (Global Config)
 
-Loaded from Lua globals and stored in `AtomicU16` / `AtomicU8` statics, re-read on REPL commands:
+Loaded from Lua globals and stored in `AtomicU16` / `AtomicU8` statics, re-read on REPL commands. Only `LOG_LEVEL` is a Rust atomic; all others are read by Lua directly each frame:
 
 | Lua Global | Static | Default | Docs |
 |---|---|---|---|
