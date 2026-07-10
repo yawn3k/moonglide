@@ -30,6 +30,50 @@ pub fn resume_thread(lua: &Lua, thread: mlua::Thread, pending: &mut Vec<PendingT
 	}
 }
 
+fn save_yielded_thread(
+	lua: &Lua,
+	thread: mlua::Thread,
+	values: mlua::MultiValue,
+	name: &str,
+	pending: &mut Vec<PendingThread>,
+) {
+	if thread.status() == mlua::ThreadStatus::Resumable {
+		if let Some(delay) = values.get(0).and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64))) {
+			println!("[dbg] {} yielded, resuming in {}s", name, delay);
+			if let Ok(key) = lua.create_registry_value(thread) {
+				pending.push(PendingThread {
+					key,
+					resume_at: Instant::now() + std::time::Duration::from_secs_f64(delay),
+				});
+			}
+		}
+	}
+}
+
+pub fn call_on_btn_down(lua: &Lua, name: &str, pending: &mut Vec<PendingThread>) {
+	crate::log_msg(1, &format!("{} down", name));
+	if let Ok(f) = lua.globals().get::<mlua::Function>("on_btn_down") {
+		if let Ok(thread) = lua.create_thread(f) {
+			match thread.resume::<mlua::MultiValue>((name,)) {
+				Ok(values) => save_yielded_thread(lua, thread, values, &format!("on_btn_down({})", name), pending),
+				Err(e) => println!("[dbg] on_btn_down({}) error: {}", name, e),
+			}
+		}
+	}
+}
+
+pub fn call_on_btn_up(lua: &Lua, name: &str, pending: &mut Vec<PendingThread>) {
+	crate::log_msg(1, &format!("{} up", name));
+	if let Ok(f) = lua.globals().get::<mlua::Function>("on_btn_up") {
+		if let Ok(thread) = lua.create_thread(f) {
+			match thread.resume::<mlua::MultiValue>((name,)) {
+				Ok(values) => save_yielded_thread(lua, thread, values, &format!("on_btn_up({})", name), pending),
+				Err(e) => println!("[dbg] on_btn_up({}) error: {}", name, e),
+			}
+		}
+	}
+}
+
 pub fn poll_pending_threads(pending: &mut Vec<PendingThread>, lua: &Lua) {
 	let now = Instant::now();
 	for i in (0..pending.len()).rev() {

@@ -31,26 +31,26 @@ fn process_deadzones(x: &mut f64, y: &mut f64, inner: f64, outer: f64) {
 fn cross_gate(x: f64, y: f64, prefix: &str, out: &mut HashSet<String>) {
 	if x == 0.0 && y == 0.0 { return; }
 	let angle = y.atan2(x).to_degrees();
-	let (c1, c2) = if angle >= -22.5 && angle < 22.5 {
-		("right", "")
+	if angle >= -22.5 && angle < 22.5 {
+		out.insert(format!("{}_right", prefix));
 	} else if angle >= 22.5 && angle < 67.5 {
-		("up", "right")
+		out.insert(format!("{}_up", prefix));
+		out.insert(format!("{}_right", prefix));
 	} else if angle >= 67.5 && angle < 112.5 {
-		("up", "")
+		out.insert(format!("{}_up", prefix));
 	} else if angle >= 112.5 && angle < 157.5 {
-		("up", "left")
+		out.insert(format!("{}_up", prefix));
+		out.insert(format!("{}_left", prefix));
 	} else if angle >= 157.5 || angle < -157.5 {
-		("left", "")
+		out.insert(format!("{}_left", prefix));
 	} else if angle >= -157.5 && angle < -112.5 {
-		("down", "left")
+		out.insert(format!("{}_down", prefix));
+		out.insert(format!("{}_left", prefix));
 	} else if angle >= -112.5 && angle < -67.5 {
-		("down", "")
+		out.insert(format!("{}_down", prefix));
 	} else {
-		("down", "right")
-	};
-	out.insert(format!("{}_{}", prefix, c1));
-	if !c2.is_empty() {
-		out.insert(format!("{}_{}", prefix, c2));
+		out.insert(format!("{}_down", prefix));
+		out.insert(format!("{}_right", prefix));
 	}
 }
 

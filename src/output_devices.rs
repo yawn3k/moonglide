@@ -43,8 +43,6 @@ impl TriggerTracker {
 		}
 		None
 	}
-
-
 }
 
 pub struct OutputDevices {

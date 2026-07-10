@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::bindings::GyroConfig;
+use crate::types::GyroConfig;
 use crate::gyro::GyroProcessor;
 use crate::output_devices::OutputDevices;
 use crate::style;

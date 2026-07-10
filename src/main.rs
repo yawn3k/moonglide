@@ -1,4 +1,5 @@
-mod bindings;
+mod api;
+mod types;
 mod config;
 mod controller;
 mod gyro;
@@ -20,11 +21,11 @@ use mlua::Lua;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-use bindings::{Config, GyroCmd, GyroConfig};
+use types::{Config, GyroCmd, GyroConfig};
 use config::CalCmd;
 use controller::{idx_to_button_name, ControllerEvent};
 use gyro_state::GyroState;
-use lua_coroutines::{poll_pending_threads, resume_thread, PendingThread};
+use lua_coroutines::{call_on_btn_down, call_on_btn_up, poll_pending_threads, resume_thread, PendingThread};
 use mapping::Mapper;
 use output::keyboard::VirtualKeyboard;
 use output::mouse::VirtualMouse;
@@ -101,78 +102,7 @@ fn main() {
 
 	let mapper = Arc::new(Mutex::new(Mapper::new()));
 
-	// ── register Rust API for Lua ──
-	{
-		let m = mapper.clone();
-		lua.globals().set("_is_held", lua.clone().create_function(move |_, btn: String| {
-			Ok(m.lock().unwrap().is_held(&btn))
-		}).unwrap()).unwrap();
-	}
-
-	{
-		let m = mapper.clone();
-		lua.globals().set("_held_buttons", lua.clone().create_function(move |_, ()| {
-			Ok(m.lock().unwrap().held_buttons())
-		}).unwrap()).unwrap();
-	}
-
-	{
-		let m = mapper.clone();
-		lua.globals().set("_press_key", lua.clone().create_function(move |_, key: String| {
-			m.lock().unwrap().press_key(&key);
-			Ok(())
-		}).unwrap()).unwrap();
-	}
-
-	{
-		let m = mapper.clone();
-		lua.globals().set("_release_key", lua.clone().create_function(move |_, key: String| {
-			m.lock().unwrap().release_key(&key);
-			Ok(())
-		}).unwrap()).unwrap();
-	}
-
-	lua.globals().set("_now", lua.clone().create_function(move |_, ()| {
-		Ok(std::time::SystemTime::now()
-			.duration_since(std::time::UNIX_EPOCH)
-			.unwrap_or_default()
-			.as_secs_f64())
-	}).unwrap()).unwrap();
-
-	// ── gyro helpers ──
-	let gt = gyro_tx.clone();
-	lua.globals().set("gyro_enable", lua.clone().create_function(move |_, ()| {
-		gt.send(GyroCmd::Enable).ok();
-		Ok(())
-	}).unwrap()).unwrap();
-
-	let gt = gyro_tx.clone();
-	lua.globals().set("gyro_disable", lua.clone().create_function(move |_, ()| {
-		gt.send(GyroCmd::Disable).ok();
-		Ok(())
-	}).unwrap()).unwrap();
-
-	let gt = gyro_tx.clone();
-	lua.globals().set("gyro_toggle", lua.clone().create_function(move |_, ()| {
-		gt.send(GyroCmd::Toggle).ok();
-		Ok(())
-	}).unwrap()).unwrap();
-
-	{
-		let gt = gyro_tx.clone();
-		lua.globals().set("gyro_hold", lua.clone().create_function(move |lua, ()| {
-			let btn: String = lua.globals().get("_current_btn").unwrap_or_default();
-			gt.send(GyroCmd::Hold(btn)).ok();
-			Ok(())
-		}).unwrap()).unwrap();
-	}
-
-	lua.globals().set("log", lua.clone()
-		.create_function(|_, (level, msg): (u8, String)| -> mlua::Result<()> {
-			log_msg(level, &msg);
-			Ok(())
-		}).unwrap()
-	).unwrap();
+	api::register_api(&lua, &mapper, &gyro_tx);
 
 	// ── setup DSL + bindings library ──
 	if let Err(e) = config::setup_dsl(&lua, &gyro_shared, &cal_tx) {
@@ -238,15 +168,6 @@ fn main() {
 
 	println!("{}", style::bold("Moonglide running. Press Escape to quit."));
 	println!("{}", style::dim("Type Lua commands in the terminal."));
-
-	{
-		let m = state.mapper.clone();
-		let reset_fn = lua.create_function(move |_, ()| -> mlua::Result<()> {
-			m.lock().unwrap().release_all();
-			Ok(())
-		}).unwrap();
-		lua.globals().set("reset", reset_fn).unwrap();
-	}
 
 	let mut pending: Vec<PendingThread> = Vec::new();
 
@@ -377,50 +298,6 @@ fn main() {
 
 	state.mapper.lock().unwrap().release_all();
 	repl_running.store(false, std::sync::atomic::Ordering::Relaxed);
-}
-
-fn save_yielded_thread(
-	lua: &Lua,
-	thread: mlua::Thread,
-	values: mlua::MultiValue,
-	name: &str,
-	pending: &mut Vec<PendingThread>,
-) {
-	if thread.status() == mlua::ThreadStatus::Resumable {
-		if let Some(delay) = values.get(0).and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64))) {
-			println!("[dbg] {} yielded, resuming in {}s", name, delay);
-			if let Ok(key) = lua.create_registry_value(thread) {
-				pending.push(PendingThread {
-					key,
-					resume_at: Instant::now() + std::time::Duration::from_secs_f64(delay),
-				});
-			}
-		}
-	}
-}
-
-fn call_on_btn_down(lua: &Lua, name: &str, pending: &mut Vec<PendingThread>) {
-	log_msg(1, &format!("{} down", name));
-	if let Ok(f) = lua.globals().get::<mlua::Function>("on_btn_down") {
-		if let Ok(thread) = lua.create_thread(f) {
-			match thread.resume::<mlua::MultiValue>((name,)) {
-				Ok(values) => save_yielded_thread(lua, thread, values, &format!("on_btn_down({})", name), pending),
-				Err(e) => println!("[dbg] on_btn_down({}) error: {}", name, e),
-			}
-		}
-	}
-}
-
-fn call_on_btn_up(lua: &Lua, name: &str, pending: &mut Vec<PendingThread>) {
-	log_msg(1, &format!("{} up", name));
-	if let Ok(f) = lua.globals().get::<mlua::Function>("on_btn_up") {
-		if let Ok(thread) = lua.create_thread(f) {
-			match thread.resume::<mlua::MultiValue>((name,)) {
-				Ok(values) => save_yielded_thread(lua, thread, values, &format!("on_btn_up({})", name), pending),
-				Err(e) => println!("[dbg] on_btn_up({}) error: {}", name, e),
-			}
-		}
-	}
 }
 
 fn handle_btn_down(name: &str, state: &mut OutputState, lua: &Lua, pending: &mut Vec<PendingThread>) {
