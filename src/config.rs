@@ -74,9 +74,10 @@ pub fn setup_dsl(
 
 	// ── load Lua scripts ──
 	lua.load(format!(
-		"{}\n{}\n{}",
+		"{}\n{}\n{}\n{}",
 		include_str!("lua/tables.lua"),
 		include_str!("lua/bindings.lua"),
+		include_str!("lua/sticks.lua"),
 		include_str!("lua/events.lua"),
 	))
 	.exec()
@@ -116,10 +117,6 @@ pub fn load(
 
 	let src = std::fs::read_to_string(path).map_err(|e| format!("read config: {}", e))?;
 	lua.load(&src).exec().map_err(|e| format!("lua exec: {}", e))?;
-
-	if let Ok(thresh) = lua.globals().get::<u16>("trigger_threshold") {
-		crate::TRIGGER_THRESHOLD.store(thresh, std::sync::atomic::Ordering::Relaxed);
-	}
 
 	let gyro = gyro_shared.lock().unwrap().clone();
 	let mut final_cfg = Config::default();

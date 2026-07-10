@@ -8,12 +8,12 @@ mod lua_coroutines;
 mod mapping;
 mod output;
 mod output_devices;
-mod stick;
+
 mod style;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -29,13 +29,10 @@ use lua_coroutines::{call_on_btn_down, call_on_btn_up, poll_pending_threads, res
 use mapping::Mapper;
 use output::keyboard::VirtualKeyboard;
 use output::mouse::VirtualMouse;
-use output_devices::{OutputDevices, TriggerTracker};
-use stick::{process_stick_buttons, MAX_AXIS};
+use output_devices::OutputDevices;
+
 
 pub(crate) static LOG_LEVEL: AtomicU8 = AtomicU8::new(0);
-pub(crate) static TRIGGER_THRESHOLD: AtomicU16 = AtomicU16::new(3000);
-static INSTANT_PRESS_TIME: AtomicU64 = AtomicU64::new(40);
-
 pub(crate) fn log_msg(level: u8, msg: &str) {
 	if LOG_LEVEL.load(Ordering::Relaxed) >= level {
 		println!("{}{}", style::dim(&format!("[{}]", level)), msg);
@@ -45,10 +42,8 @@ pub(crate) fn log_msg(level: u8, msg: &str) {
 struct OutputState {
 	dev: OutputDevices,
 	mapper: Arc<Mutex<Mapper>>,
-	triggers: TriggerTracker,
 	gyro: GyroState,
 	axis_state: HashMap<u32, [i16; 6]>,
-	prev_stick_dirs: HashMap<u32, HashSet<String>>,
 	gyro_rx: std::sync::mpsc::Receiver<GyroCmd>,
 }
 
@@ -138,20 +133,8 @@ fn main() {
 	let mouse = VirtualMouse::new().ok();
 	let kbd = VirtualKeyboard::new().ok();
 
-	let read_dz = |name: &str, def: f64| -> u16 {
-		((lua.globals().get::<f64>(name).unwrap_or(def)).clamp(0.0, 1.0) * MAX_AXIS) as u16
-	};
-
 	let load_globals = |lua: &Lua| {
 		LOG_LEVEL.store(lua.globals().get::<u8>("log_level").unwrap_or(0), Ordering::Relaxed);
-		TRIGGER_THRESHOLD.store(lua.globals().get::<u16>("trigger_threshold").unwrap_or(3000), Ordering::Relaxed);
-		INSTANT_PRESS_TIME.store(lua.globals().get::<u64>("instant_press_time").unwrap_or(40), Ordering::Relaxed);
-		stick::LEFT_STICK_INNER.store(read_dz("left_stick_inner_deadzone", 0.15), Ordering::Relaxed);
-		stick::LEFT_STICK_OUTER.store(read_dz("left_stick_outer_deadzone", 1.0), Ordering::Relaxed);
-		stick::RIGHT_STICK_INNER.store(read_dz("right_stick_inner_deadzone", 0.15), Ordering::Relaxed);
-		stick::RIGHT_STICK_OUTER.store(read_dz("right_stick_outer_deadzone", 1.0), Ordering::Relaxed);
-		stick::LEFT_RING_POSITION.store(read_dz("left_ring_position", 0.8), Ordering::Relaxed);
-		stick::RIGHT_RING_POSITION.store(read_dz("right_ring_position", 0.8), Ordering::Relaxed);
 	};
 
 	load_globals(&lua);
@@ -159,10 +142,8 @@ fn main() {
 	let mut state = OutputState {
 		dev: OutputDevices { mouse, kbd },
 		mapper,
-		triggers: TriggerTracker::new(),
 		gyro: GyroState::new(&cfg.gyro),
 		axis_state: HashMap::new(),
-		prev_stick_dirs: HashMap::new(),
 		gyro_rx,
 	};
 
@@ -202,13 +183,6 @@ fn main() {
 						let axes = state.axis_state.entry(which).or_insert([0i16; 6]);
 						if idx >= 101 && idx <= 106 {
 							axes[(idx - 101) as usize] = val;
-						}
-						if let Some((name, pressed)) = state.triggers.process(which, idx, val) {
-							if pressed {
-								handle_btn_down(&name, &mut state, &lua, &mut pending);
-							} else {
-								handle_btn_up(&name, &mut state, &lua, &mut pending);
-							}
 						}
 					}
 					ControllerEvent::ButtonDown(btn_idx) => {
@@ -266,16 +240,32 @@ fn main() {
 		}
 
 		// ── process stick directions ──
-		let (new_dirs, removed_dirs) = process_stick_buttons(
-			&state.axis_state, &mut state.prev_stick_dirs,
-		);
-		for dir in &new_dirs {
-			state.mapper.lock().unwrap().button_down(dir, Instant::now());
-			call_on_btn_down(&lua, dir, &mut pending);
-		}
-		for dir in &removed_dirs {
-			state.mapper.lock().unwrap().button_up(dir);
-			call_on_btn_up(&lua, dir, &mut pending);
+		if let Ok(on_sticks) = lua.globals().get::<mlua::Function>("process_sticks") {
+			for (which, axes) in state.axis_state.iter() {
+				let lx = axes[0] as f64;
+				let ly = -(axes[1] as f64);
+				let rx = axes[2] as f64;
+				let ry = -(axes[3] as f64);
+				let lt = axes[4] as f64;
+				let rt = axes[5] as f64;
+				match on_sticks.call::<mlua::Table>((*which, lx, ly, rx, ry, lt, rt)) {
+					Ok(result) => {
+						if let Ok(pressed) = result.get::<Vec<String>>("pressed") {
+							for dir in &pressed {
+								state.mapper.lock().unwrap().button_down(dir, Instant::now());
+								call_on_btn_down(&lua, dir, &mut pending);
+							}
+						}
+						if let Ok(released) = result.get::<Vec<String>>("released") {
+							for dir in &released {
+								state.mapper.lock().unwrap().button_up(dir);
+								call_on_btn_up(&lua, dir, &mut pending);
+							}
+						}
+					}
+					Err(_) => {}
+				}
+			}
 		}
 
 		// ── Lua frame callback ──
