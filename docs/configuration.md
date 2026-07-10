@@ -48,28 +48,35 @@ After each REPL command, the following globals are re-read and applied immediate
 - `right_stick_inner_deadzone`, `right_stick_outer_deadzone`
 - `left_ring_position`, `right_ring_position`
 - Any `bind.*` calls
-- `reset()`, `include()`
+- `reset()`, `gyro_*` calls
 
-Other changes require a full config reload.
+Only `hold_press_time` is read at config load only (not re-read from REPL).
 
 ### REPL commands
 
 | Command | Effect |
 |---------|--------|
-| `include("path")` | Load additional config file |
 | `reset()` | Clear all bindings, release held keys |
-| `gyro_calibrate_start()` | Start gyro calibration |
-| `gyro_calibrate_stop()` | Stop gyro calibration |
+| `gyro_enable()` / `gyro_disable()` | Toggle gyro on/off |
+| `gyro_calibrate_start()` / `gyro_calibrate_stop()` | Run gyro bias calibration |
 
-## `include()` — loading additional files
+## `require()` — loading additional files
+
+The config directory is automatically added to Lua's `package.path`. Put helper modules next to your config and require them:
 
 ```lua
-include("./config/extra.lua")                -- relative to CWD
-include("~/.config/moonglide/game.lua")      -- home directory
-include("/absolute/path.lua")
+-- my_config.lua
+local gyro_curve = require("gyro_curve")
+local stick_overrides = require("special_sticks")
 ```
 
-Loaded files are processed the same as the main config — all `bind.*` calls register bindings.
+```lua
+-- gyro_curve.lua (in the same directory)
+return {
+    sensitivity = 2.0,
+    smoothing = 0.3,
+}
+```
 
 ## `reset()` — clearing bindings
 
@@ -82,7 +89,7 @@ Useful from the REPL to reload config:
 ```lua
 > reset()
 > ok
-> include("./new_config.lua")
+> dofile("./new_config.lua")
 > ok
 ```
 
@@ -131,7 +138,7 @@ end)
 
 | Global | Default | Description |
 |--------|---------|-------------|
-| `log_level` | 0 | 0 = off, 1 = controller buttons, triggers, touchpad |
+| `log_level` | 0 | 0 = errors/info only, 1 = controller buttons, triggers, calibration progress |
 
 Use `log(level, "msg")` inside binding functions for custom log messages:
 
