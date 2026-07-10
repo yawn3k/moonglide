@@ -12,4 +12,5 @@ pub fn yellow(s: &str) -> String { format!("{}{}{}", YELLOW, s, RESET) }
 pub fn info(s: &str) -> String { format!("{}{}{}{}", BOLD, GREEN, s, RESET) }
 pub fn warn(s: &str) -> String { format!("{}{}{}{}", BOLD, YELLOW, s, RESET) }
 pub fn err(s: &str) -> String { format!("{}{}{}{}", BOLD, RED, s, RESET) }
+pub fn progress(s: &str) -> String { format!("{}{}{}", DIM, s, RESET) }
 

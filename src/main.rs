@@ -12,8 +12,6 @@ use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
-
 use mlua::Lua;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -29,7 +27,7 @@ use output_devices::OutputDevices;
 pub(crate) static LOG_LEVEL: AtomicU8 = AtomicU8::new(0);
 pub(crate) fn log_msg(level: u8, msg: &str) {
 	if LOG_LEVEL.load(Ordering::Relaxed) >= level {
-		println!("{}{}", style::dim(&format!("[{}]", level)), msg);
+		println!("{} {}", style::dim(&format!("[{}]", level)), msg);
 	}
 }
 
@@ -223,7 +221,7 @@ fn main() {
 					Ok(result) => {
 						if let Ok(pressed) = result.get::<Vec<String>>("pressed") {
 							for dir in &pressed {
-								state.mapper.lock().unwrap().button_down(dir, Instant::now());
+								state.mapper.lock().unwrap().button_down(dir);
 								call_on_btn_down(&lua, dir, &mut pending);
 							}
 						}
@@ -262,8 +260,7 @@ fn main() {
 }
 
 fn handle_btn_down(name: &str, state: &mut OutputState, lua: &Lua, pending: &mut Vec<PendingThread>) {
-	let now = Instant::now();
-	state.mapper.lock().unwrap().button_down(name, now);
+	state.mapper.lock().unwrap().button_down(name);
 	call_on_btn_down(lua, name, pending);
 }
 

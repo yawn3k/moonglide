@@ -55,7 +55,7 @@ end
 function gyro_calibrate_start()
 	gyro_state.cal_samples = {}
 	gyro_state.calibrating = true
-	log(1, "gyro calibration started — collecting samples")
+	_info("gyro calibration started — collecting samples")
 end
 
 function gyro_calibrate_stop()
@@ -74,14 +74,14 @@ function gyro_calibrate_stop()
 	gyro_state.bias_y = sum_y / n
 	gyro_state.cal_samples = {}
 	gyro_state.calibrating = false
-	log(1, string.format("gyro calibration complete (%d samples)", n))
+	_info(string.format("gyro calibration complete (%d samples)", n))
 end
 
 function process_gyro(gx, gy, gz)
 	if gyro_state.calibrating then
 		gyro_state.cal_samples[#gyro_state.cal_samples + 1] = { x = gx, y = gy, z = gz }
 		if #gyro_state.cal_samples % 100 == 0 then
-			log(2, string.format("calibrating... %d samples collected", #gyro_state.cal_samples))
+			log(1, string.format("calibrating... %d samples collected", #gyro_state.cal_samples))
 		end
 		return {}
 	end

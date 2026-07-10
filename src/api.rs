@@ -4,6 +4,7 @@ use mlua::Lua;
 
 use crate::log_msg;
 use crate::mapping::Mapper;
+use crate::style;
 
 pub fn register_api(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 	{
@@ -82,6 +83,30 @@ pub fn register_api(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 			lua.clone()
 				.create_function(|_, (level, msg): (u8, String)| -> mlua::Result<()> {
 					log_msg(level, &msg);
+					Ok(())
+				})
+				.unwrap(),
+		)
+		.unwrap();
+
+	lua.globals()
+		.set(
+			"_info",
+			lua.clone()
+				.create_function(|_, msg: String| -> mlua::Result<()> {
+					println!("{}", style::info(&msg));
+					Ok(())
+				})
+				.unwrap(),
+		)
+		.unwrap();
+
+	lua.globals()
+		.set(
+			"_progress",
+			lua.clone()
+				.create_function(|_, msg: String| -> mlua::Result<()> {
+					println!("{}", style::progress(&msg));
 					Ok(())
 				})
 				.unwrap(),

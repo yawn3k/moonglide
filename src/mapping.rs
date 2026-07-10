@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use std::collections::HashSet;
 
 pub struct Mapper {
-	held_buttons: HashMap<String, Instant>,
+	held_buttons: HashSet<String>,
 	held_keys: HashSet<String>,
 	action_queue: Vec<(String, bool)>,
 }
@@ -10,14 +9,14 @@ pub struct Mapper {
 impl Mapper {
 	pub fn new() -> Self {
 		Self {
-			held_buttons: HashMap::new(),
+			held_buttons: HashSet::new(),
 			held_keys: HashSet::new(),
 			action_queue: Vec::new(),
 		}
 	}
 
-	pub fn button_down(&mut self, btn: &str, now: Instant) {
-		self.held_buttons.insert(btn.to_string(), now);
+	pub fn button_down(&mut self, btn: &str) {
+		self.held_buttons.insert(btn.to_string());
 	}
 
 	pub fn button_up(&mut self, btn: &str) {
@@ -25,11 +24,11 @@ impl Mapper {
 	}
 
 	pub fn is_held(&self, btn: &str) -> bool {
-		self.held_buttons.contains_key(btn)
+		self.held_buttons.contains(btn)
 	}
 
 	pub fn held_buttons(&self) -> Vec<String> {
-		self.held_buttons.keys().cloned().collect()
+		self.held_buttons.iter().cloned().collect()
 	}
 
 	pub fn press_key(&mut self, key: &str) {
