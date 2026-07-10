@@ -66,10 +66,6 @@ impl GyroState {
 		}
 	}
 
-	pub fn active(&self) -> bool {
-		self.active
-	}
-
 	pub fn start_calibration(&mut self) {
 		self.cal_samples.clear();
 		self.calibrating = true;

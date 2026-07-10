@@ -169,10 +169,6 @@ function gyro_toggle() end
 --- Enable gyro while the current binding's button is held.
 function gyro_hold() end
 
---- Load additional config file.
----@param path string
-function include(path) end
-
 --- Clear all bindings and release held keys.
 function reset() end
 
