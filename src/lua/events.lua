@@ -56,6 +56,9 @@ function on_btn_down(btn)
 				_current_btn = btn
 				ms.func()
 				consumed[btn] = true
+				for _, m in ipairs(ms.modifiers) do
+					consumed[m] = true
+				end
 				return
 			end
 		end
@@ -84,6 +87,9 @@ function on_btn_down(btn)
 						end
 						if all_mods then
 							consumed[held_btn] = true
+							for _, m in ipairs(ms.modifiers) do
+								consumed[m] = true
+							end
 						end
 					end
 				end
