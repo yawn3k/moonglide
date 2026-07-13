@@ -36,6 +36,9 @@ struct OutputState {
 	dev: OutputDevices,
 	mapper: Arc<Mutex<Mapper>>,
 	axis_state: HashMap<u32, [i16; 6]>,
+	latest_gyro: (f64, f64, f64),
+	latest_accel: (f64, f64, f64),
+	last_sensor_time: Option<f64>,
 }
 
 fn main() {
@@ -86,6 +89,11 @@ fn main() {
 
 	api::register_api(&lua, &mapper);
 
+	let _ = lua.globals().set("_gyro_raw", lua.create_table().unwrap());
+	let _ = lua.globals().set("_accel_raw", lua.create_table().unwrap());
+	let _ = lua.globals().set("_gravity", lua.create_table().unwrap());
+	let _ = lua.globals().set("_orientation", lua.create_table().unwrap());
+
 	if let Err(e) = config::setup_dsl(&lua) {
 		eprintln!("{}", style::err(&format!("setup_dsl: {}", e)));
 		return;
@@ -123,6 +131,9 @@ fn main() {
 		dev: OutputDevices { mouse, kbd },
 		mapper,
 		axis_state: HashMap::new(),
+		latest_gyro: (0.0, 0.0, 0.0),
+		latest_accel: (0.0, 0.0, 0.0),
+		last_sensor_time: None,
 	};
 
 	println!("{}", style::bold("Moonglide running. Press Escape to quit."));
@@ -177,6 +188,20 @@ fn main() {
 						handle_btn_up("touchpad_touch", &mut state, &lua, &mut pending);
 					}
 					ControllerEvent::Gyro { x, y, z } => {
+						state.latest_gyro = (x as f64, y as f64, z as f64);
+
+						let now = std::time::SystemTime::now()
+							.duration_since(std::time::UNIX_EPOCH)
+							.unwrap_or_default()
+							.as_secs_f64();
+						let dt = state.last_sensor_time.map(|t| (now - t).min(0.1)).unwrap_or(0.0);
+						state.last_sensor_time = Some(now);
+
+						let (ax, ay, az) = state.latest_accel;
+						if let Ok(f) = lua.globals().get::<mlua::Function>("on_sensor_event") {
+							let _ = f.call::<()>((x as f64, y as f64, z as f64, ax, ay, az, dt, true));
+						}
+
 						if let Ok(f) = lua.globals().get::<mlua::Function>("process_gyro") {
 							match f.call::<mlua::Table>((x as f64, y as f64, z as f64)) {
 								Ok(result) => {
@@ -188,6 +213,21 @@ fn main() {
 								}
 								Err(e) => log_msg(2, &format!("process_gyro: {}", e)),
 							}
+						}
+					}
+					ControllerEvent::Accelerometer { x, y, z } => {
+						state.latest_accel = (x as f64, y as f64, z as f64);
+
+						let now = std::time::SystemTime::now()
+							.duration_since(std::time::UNIX_EPOCH)
+							.unwrap_or_default()
+							.as_secs_f64();
+						let dt = state.last_sensor_time.map(|t| (now - t).min(0.1)).unwrap_or(0.0);
+						state.last_sensor_time = Some(now);
+
+						let (gx, gy, gz) = state.latest_gyro;
+						if let Ok(f) = lua.globals().get::<mlua::Function>("on_sensor_event") {
+							let _ = f.call::<()>((gx, gy, gz, x as f64, y as f64, z as f64, dt, false));
 						}
 					}
 					ControllerEvent::Connected(id) => println!("{}", style::green(&format!("controller connected (instance {})", id))),

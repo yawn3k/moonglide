@@ -26,13 +26,14 @@ cargo test <name>             # single test by name
 
 ```
 src/
-├── main.rs            — SDL init, event loop, Lua config load, Lua gyro invocation
+├── main.rs            — SDL init, event loop, Lua config load, gyro/accel/sensor fusion
 ├── config.rs          — loads Lua scripts (tables/bindings/sticks/gyro/events)
 ├── api.rs             — Lua ↔ Rust glue functions (_press_key, _is_held, log, etc.)
 ├── mapping.rs         — Mapper: button state → active keyboard/mouse output
 ├── controller.rs      — SDL controller open/close/sensor events → ControllerEvent
 ├── lua_coroutines.rs  — PendingThread, execute/poll Lua coroutines
 ├── output_devices.rs  — OutputDevices (mouse+kbd)
+├── frame_pacer.rs     — FramePacer (drift-compensated sleep at target FPS)
 ├── style.rs           — ANSI escape helpers for console output
 ├── output/
 │   ├── mouse.rs       — uinput mouse (relative move, buttons)
@@ -41,7 +42,7 @@ src/
     ├── tables.lua     — con/key/mouse typed ref tables
     ├── bindings.lua   — bind.* DSL, press/release/instant/toggle/held/wait
     ├── sticks.lua     — process_sticks (deadzone, cross-gate, ring, triggers)
-    ├── gyro.lua       — process_gyro (RWS math, bias, calibration, enable/disable)
+    ├── gyro.lua       — process_gyro (spaces, fusion, deadzone, calibration), on_sensor_event (fusion, gravity auto-init, bias)
     └── events.lua     — on_btn_down/up/update callbacks (chords, DP, modeshift, etc.)
 ```
 
@@ -60,7 +61,11 @@ SDL events → ControllerManager → ControllerEvent enum → match in main loop
                   │                                          │
             AxisMotion ──→ process_sticks (Lua) ────────────→ handle_btn_down/up
                   │                                          │
-                  └──→ process_gyro (Lua) → dev.mouse        │
+                  ├──→ on_sensor_event (Lua → fusion + globals)
+                  │         │
+                  │         └──→ process_gyro (Lua) → dev.mouse
+                  │                                          │
+                  └── Accelerometer ─→ on_sensor_event (Lua)  │
                                                                ▼
                    ┌──────────────────────────────────────────┐
                    │  on_btn_down / on_btn_up (Lua)           │
@@ -82,7 +87,7 @@ SDL events → ControllerManager → ControllerEvent enum → match in main loop
                    └──────────────────────────┘
 ```
 
-Main loop runs at ~240 Hz. The Lua VM runs on the main thread; only the REPL thread is separate. The `mapper` mutex is locked briefly for button/key state queries, never held across Lua calls.
+Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The Lua VM runs on the main thread; only the REPL thread is separate. The `mapper` mutex is locked briefly for button/key state queries, never held across Lua calls.
 
 ## Lua DSL Registration (config.rs)
 
@@ -91,7 +96,9 @@ Main loop runs at ~240 Hz. The Lua VM runs on the main thread; only the REPL thr
 - `con`/`key`/`mouse` typed ref tables (`tables.lua`)
 - `bind.*` DSL, user helpers (`press`, `release`, `instant`, `toggle`, `held`, `wait`) (`bindings.lua`)
 - `process_sticks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
-- `process_gyro()` — RWS math, bias, calibration, enable/disable (`gyro.lua`)
+- `process_steicks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
+- `process_gyro()` — four gyro spaces, deadzone, calibration, enable/disable (`gyro.lua`)
+- `on_sensor_event()` — fusion, gravity auto-init, bias subtraction (`gyro.lua`)
 - `on_btn_down/up/update` — event dispatching (chords, modeshift, DP, turbo, hold timers) (`events.lua`)
 
 `init_bare()` sets `package.path` to `./?.lua`. `load(path)` prepends the config file's directory to `package.path`, then executes the file. No Rust-side struct conversion — all binding logic stays in Lua.
@@ -144,11 +151,16 @@ Internally: `process_sticks()` is called every frame in the main loop. It builds
 See [docs/gyro.md](docs/gyro.md) for gyro modes, sensitivity, calibration, and activation settings.
 
 Internally:
-- **RWS** (Ratcheting Walking Sim): yaw → mouse X, pitch → mouse -Y, roll ignored
-- Bias subtraction: `value - bias` for X and Y axes
-- Output: `angle_deg × calibration × sensitivity / in_game_sens`
-- Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias
+- **Four spaces**: `local_yaw` (default, yaw→X pitch→Y), `local_roll` (roll→X pitch→Y), `player` (world-horizontal yaw + local pitch via JSM), `world` (both axes world-relative via JSM)
+- **Sensor fusion**: JSM-style complementary filter — gyro rotation → quaternion → accel smoothing + shakiness → gravity correction → quaternion tilt correction
+- **on_sensor_event()** called on every gyro AND accel event (~2000 Hz combined): updates `_gravity`/`_orientation`/`_gyro_raw`/`_accel_raw` globals, handles calibration samples (gated on `is_gyro`), runs bias subtraction, drives fusion
+- **Gyro deadzone**: configurable in deg/s, suppresses output and zeros accum below threshold
+- Bias subtraction: `value - bias` for X, Y, Z axes
+- Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias (now 3 axes including Z)
+- Gravity auto-initialized from first valid accelerometer reading — no hardcoded orientation guess
 - Activation: `gyro_enable()`/`gyro_disable()`/`gyro_toggle()`/`gyro_hold()` called from bindings
+
+> Note: `player` and `world` spaces are **experimental** — `local_yaw` and `local_roll` are fully stable.
 
 See `src/lua/gyro.lua` for implementation.
 
@@ -183,3 +195,15 @@ Config globals read by Lua each frame (no Rust atomics — just Lua globals):
 | `right_ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
 
 `log_level` is the only Rust-side global stored in an `AtomicU8`, re-read from Lua on REPL commands. All others are read by Lua directly each frame — no Rust involvement.
+
+## Gyro Config (gyro {}) Fields
+
+Set via the `gyro(tbl)` function in config:
+
+| Field | Default | Description |
+|---|---|---|
+| `sensitivity` / `gyro_sens` | 1.0 | Multiplier (single or `{h, v}`) |
+| `calibration` | 45.454 | RWS factor (CS2 baseline) |
+| `in_game_sens` | 1.0 | Game's mouse sensitivity value |
+| `deadzone` | 0 | Gyro deadzone in deg/s |
+| `space` | `"local_yaw"` | One of: `local_yaw`, `local_roll`, `player`, `world` |

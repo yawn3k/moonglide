@@ -30,6 +30,7 @@ pub enum ControllerEvent {
 	TouchpadTouch,
 	TouchpadUntouch,
 	Gyro { x: f32, y: f32, z: f32 },
+	Accelerometer { x: f32, y: f32, z: f32 },
 	Connected(u32),
 	Disconnected(u32),
 }
@@ -50,7 +51,7 @@ impl ControllerManager {
 					match mgr.sub.open(id) {
 						Ok(c) => {
 							let instance = c.instance_id();
-							gyro_enable(&c);
+							enable_sensors(&c);
 							mgr.controllers.insert(instance, c);
 						}
 						Err(e) => eprintln!("open controller {}: {}", id, e),
@@ -101,12 +102,18 @@ impl ControllerManager {
 						y: data[1],
 						z: data[2],
 					});
+				} else if *sensor == sdl2::sensor::SensorType::Accelerometer {
+					out.push(ControllerEvent::Accelerometer {
+						x: data[0],
+						y: data[1],
+						z: data[2],
+					});
 				}
 			}
 			sdl2::event::Event::ControllerDeviceAdded { which, .. } => {
 				if let Ok(c) = self.sub.open(*which) {
 					let instance = c.instance_id();
-					gyro_enable(&c);
+					enable_sensors(&c);
 					out.push(ControllerEvent::Connected(instance));
 					self.controllers.insert(instance, c);
 				}
@@ -123,9 +130,12 @@ impl ControllerManager {
 	}
 }
 
-fn gyro_enable(c: &GameController) {
+fn enable_sensors(c: &GameController) {
 	if c.has_sensor(sdl2::sensor::SensorType::Gyroscope) {
 		let _ = c.sensor_set_enabled(sdl2::sensor::SensorType::Gyroscope, true);
+	}
+	if c.has_sensor(sdl2::sensor::SensorType::Accelerometer) {
+		let _ = c.sensor_set_enabled(sdl2::sensor::SensorType::Accelerometer, true);
 	}
 }
 

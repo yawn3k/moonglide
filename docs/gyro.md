@@ -1,34 +1,30 @@
 # Gyro
 
-Gyro maps controller rotation to mouse movement.
+Gyro maps controller rotation to mouse movement. Uses sensor fusion (JSM-style complementary filter) for reliable gravity/orientation tracking across all four gyro spaces.
 
 ## Config
 
-Set a `gyro {}` block in your Lua config to tune sensitivity:
-
 ```lua
 gyro {
-    gyro_sens = 1.0,
-    calibration = 45.454,
-    in_game_sens = 1.0,
+    sensitivity = 1.0,        -- multiplier (single or {h, v})
+    calibration = 45.454,     -- CS2 baseline: 360° turn at sens=1, in_game_sens matching the game
+    in_game_sens = 1.0,       -- match your game's sensitivity slider
+    deadzone = 0,             -- deg/s threshold below which output is suppressed
+    space = "local_yaw",      -- one of: local_yaw, local_roll, player, world
 }
 ```
 
-If the `gyro {}` block is omitted, gyro is off.
+`sensitivity` (alias `gyro_sens`) accepts:
+- A single number (same for both axes): `sensitivity = 1.0`
+- A table for separate horizontal/vertical: `sensitivity = {1.0, 1.5}`
 
 ## Activation
 
-Gyro is activated from bindings using dedicated helpers. Wire them to any button via `bind.press`, `bind.chord`, `bind.modeshift`, etc.:
+Gyro is activated from bindings:
 
 ```lua
 bind.press(con.l_trigger, gyro_enable)
 bind.release(con.l_trigger, gyro_disable)
-```
-
-Or toggle:
-
-```lua
-bind.press(con.x, gyro_toggle)
 ```
 
 | Helper | Behavior |
@@ -36,7 +32,7 @@ bind.press(con.x, gyro_toggle)
 | `gyro_enable()` | Enable gyro |
 | `gyro_disable()` | Disable gyro, zero accumulated motion |
 | `gyro_toggle()` | Toggle gyro on/off |
-| `gyro_hold()` | Enable gyro while the current button is held (auto-disables on release) |
+| `gyro_hold()` | Enable while current button held (auto-disables on release) |
 
 ### Hold example
 
@@ -44,31 +40,24 @@ bind.press(con.x, gyro_toggle)
 bind.press(con.touchpad_touch, gyro_hold)
 ```
 
-## Sensitivity
+## Gyro Spaces
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `sensitivity` | 1.0 | Gyro multiplier (alias: `gyro_sens`) |
-| `gyro_sens` | 1.0 | Overrides `sensitivity` if both are set |
-| `calibration` | 45.454 | Real World Calibration factor (CS2 baseline). A 360° controller rotation produces a 360° in-game turn at `gyro_sens=1` and `in_game_sens` matching the game's sensitivity slider. |
-| `in_game_sens` | 1.0 | The game's mouse sensitivity value. Set to match your game's sensitivity slider. |
+Four spaces controlling how rotation maps to mouse movement:
 
-`gyro_sens` (or `sensitivity`) accepts either:
-- A single number (same for both axes): `gyro_sens = 1.0`
-- A table for separate horizontal/vertical: `gyro_sens = {1.0, 1.5}`
-- A two-number string: `gyro_sens = "1.0 1.5"`
+| Space | Horizontal (mouse X) | Vertical (mouse Y) | Yaw ignored? |
+|-------|---------------------|-------------------|--------------|
+| `local_yaw` (default) | controller yaw (gyro Y) | controller pitch (gyro X) | no |
+| `local_roll` | controller roll (gyro Z) | controller pitch (gyro X) | yes |
+| `player` | world-horizontal yaw (projected via gravity) | controller pitch (gyro X) | no |
+| `world` | world-vertical rotation (gravity-axis) | world-horizontal rotation | no |
 
-## Gyro space
+**`player`** and **`world`** use gravity (auto-initialized from the first accelerometer reading) to project gyro rotation onto world axes. Works in any controller orientation.
 
-Local yaw gyrospace:
-
-- Controller yaw (z-axis rotation) → mouse X
-- Controller pitch (y-axis rotation) → mouse -Y
-- Roll (x-axis) is ignored
+> Note: `player` and `world` are **experimental** — the gravity projection may behave unexpectedly in some orientations. `local_yaw` and `local_roll` are confirmed working correctly.
 
 ## Calibration
 
-Calibration captures the gyro's resting bias and subtracts it from readings. Use from a binding:
+Captures gyro resting bias and subtracts it from readings:
 
 ```lua
 bind.press(con.b, function()
@@ -81,6 +70,24 @@ bind.press(con.b, function()
 end)
 ```
 
-The calibration helper functions:
 - `gyro_calibrate_start()` — begin collecting bias samples
-- `gyro_calibrate_stop()` — compute per-axis bias, subtract from readings
+- `gyro_calibrate_stop()` — compute per-axis bias (X, Y, Z), subtract from readings
+
+## Per-Frame Globals
+
+Updated every sensor event (~2000 Hz combined gyro + accel):
+
+| Global | Content |
+|--------|---------|
+| `_gyro_raw` | Latest raw gyro `{x, y, z}` (rad/s, before bias subtraction) |
+| `_accel_raw` | Latest raw accelerometer `{x, y, z}` (m/s²) |
+| `_gravity` | Current estimated gravity direction `{x, y, z}` (normalized) |
+| `_orientation` | Current orientation quaternion `{x, y, z, w}` |
+
+## Sensor Event Callback
+
+`on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)` is called on every sensor event (gyro AND accel). Can be overridden for custom calibration, fusion, or logging. The default implementation handles bias, JSM-style complementary filter, gravity tracking, and orientation.
+
+## Deadzone
+
+`gyro { deadzone = 2 }` — suppresses all mouse output when the combined angular speed (all axes) is below the threshold in deg/s. Accumulators are zeroed, so no jump when crossing back out.

@@ -1,8 +1,53 @@
+-- gyro processing: sensor fusion, calibration, gyro spaces
+-- called from Rust via on_sensor_event and process_gyro
+
 local RAD_TO_DEG = 180 / math.pi
 
+-- quaternion math (internal, no table allocs)
+local function qmul(w1, x1, y1, z1, w2, x2, y2, z2)
+	return w1*w2 - x1*x2 - y1*y2 - z1*z2,
+	       w1*x2 + x1*w2 + y1*z2 - z1*y2,
+	       w1*y2 - x1*z2 + y1*w2 + z1*x2,
+	       w1*z2 + x1*y2 - y1*x2 + z1*w2
+end
+
+local function qaxis_angle(angle, x, y, z)
+	local ha = angle * 0.5
+	local s = math.sin(ha)
+	local len = math.sqrt(x*x + y*y + z*z)
+	if len > 0 then s = s / len end
+	return math.cos(ha), x*s, y*s, z*s
+end
+
+local function qrot_vec(vx, vy, vz, qw, qx, qy, qz)
+	local vw, vx2, vy2, vz2 = qmul(qw, qx, qy, qz, 0, vx, vy, vz)
+	local _, rx, ry, rz = qmul(vw, vx2, vy2, vz2, qw, -qx, -qy, -qz)
+	return rx, ry, rz
+end
+
+-- vector math (internal)
+local function vlen(x, y, z)
+	return math.sqrt(x*x + y*y + z*z)
+end
+
+local function vnorm(x, y, z)
+	local len = vlen(x, y, z)
+	if len > 0 then return x/len, y/len, z/len end
+	return x, y, z
+end
+
+local function vdot(x1, y1, z1, x2, y2, z2)
+	return x1*x2 + y1*y2 + z1*z2
+end
+
+local function vcross(x1, y1, z1, x2, y2, z2)
+	return y1*z2 - z1*y2, z1*x2 - x1*z2, x1*y2 - y1*x2
+end
+
+-- gyro state
 local gyro_state = {
 	active = false,
-	bias_x = 0, bias_y = 0,
+	bias_x = 0, bias_y = 0, bias_z = 0,
 	sens_h = 1, sens_v = 1,
 	calibration = 45.454,
 	in_game_sens = 1,
@@ -11,7 +56,30 @@ local gyro_state = {
 	cal_samples = {},
 	calibrating = false,
 	hold_button = nil,
+
+	-- sensor fusion state
+	quat = { w = 1, x = 0, y = 0, z = 0 },
+	grav = { x = 0, y = 0, z = 0 },
+	shakiness = 0,
+	smooth_accel = { x = 0, y = 0, z = 0 },
+	sensor_last_time = nil,
+
+	-- calibrated gyro (set by on_sensor_event, read by process_gyro)
+	cal_gx = 0, cal_gy = 0, cal_gz = 0,
+
+	-- flag for gravity auto-init
+	grav_initialized = false,
+
+	-- gyro deadzone in deg/s
+	deadzone = 0,
+
+	-- gyro space
+	space = "local_yaw",
 }
+
+-- init gravity/orientation globals from module load
+_gravity.x, _gravity.y, _gravity.z = 0, 0, 0
+_orientation.w, _orientation.x, _orientation.y, _orientation.z = 1, 0, 0, 0
 
 local function parse_sens(val)
 	if type(val) == "table" then
@@ -27,6 +95,10 @@ function gyro(tbl)
 	gyro_state.sens_h, gyro_state.sens_v = parse_sens(s)
 	gyro_state.calibration = tbl.calibration or gyro_state.calibration
 	gyro_state.in_game_sens = tbl.in_game_sens or gyro_state.in_game_sens
+	gyro_state.deadzone = tbl.deadzone or gyro_state.deadzone
+	if tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world" then
+		gyro_state.space = tbl.space
+	end
 end
 
 function gyro_enable()
@@ -65,40 +137,213 @@ function gyro_calibrate_stop()
 		return
 	end
 	local n = #gyro_state.cal_samples
-	local sum_x, sum_y = 0, 0
+	local sum_x, sum_y, sum_z = 0, 0, 0
 	for _, s in ipairs(gyro_state.cal_samples) do
 		sum_x = sum_x + s.x
 		sum_y = sum_y + s.y
+		sum_z = sum_z + s.z
 	end
 	gyro_state.bias_x = sum_x / n
 	gyro_state.bias_y = sum_y / n
+	gyro_state.bias_z = sum_z / n
 	gyro_state.cal_samples = {}
 	gyro_state.calibrating = false
 	_info(string.format("gyro calibration complete (%d samples)", n))
 end
 
-function process_gyro(gx, gy, gz)
-	if gyro_state.calibrating then
+-- JSM-style complementary filter: maintain gravity + orientation from gyro + accel
+local function update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
+	local q = gyro_state.quat
+	local gv = gyro_state.grav
+
+	local angle_speed = vlen(cgx, cgy, cgz) * math.pi / 180
+	local angle = angle_speed * dt
+
+	local rot_w, rot_x, rot_y, rot_z
+	local ri_w, ri_x, ri_y, ri_z
+
+	if angle > 0 then
+		local rx, ry, rz = cgx / angle_speed, cgy / angle_speed, cgz / angle_speed
+		rot_w, rot_x, rot_y, rot_z = qaxis_angle(angle, rx, ry, rz)
+		ri_w, ri_x, ri_y, ri_z = rot_w, -rot_x, -rot_y, -rot_z
+		q.w, q.x, q.y, q.z = qmul(q.w, q.x, q.y, q.z, rot_w, rot_x, rot_y, rot_z)
+	else
+		rot_w, rot_x, rot_y, rot_z = 1, 0, 0, 0
+		ri_w, ri_x, ri_y, ri_z = 1, 0, 0, 0
+	end
+
+	local accel_mag = vlen(ax, ay, az)
+	if accel_mag > 0 then
+		local anx, any, anz = vnorm(ax, ay, az)
+
+		-- rotate smooth_accel by inverse rotation (keep in controller frame)
+		local sax, say, saz = qrot_vec(gyro_state.smooth_accel.x, gyro_state.smooth_accel.y, gyro_state.smooth_accel.z, ri_w, ri_x, ri_y, ri_z)
+
+		-- exponential smoothing of accel, track shakiness
+		local half_time = 0.25
+		local sf = half_time > 0 and 2^(-dt / half_time) or 0
+		gyro_state.shakiness = gyro_state.shakiness * sf
+		gyro_state.shakiness = math.max(gyro_state.shakiness, vlen(ax - sax, ay - say, az - saz))
+		gyro_state.smooth_accel.x, gyro_state.smooth_accel.y, gyro_state.smooth_accel.z = sax + (ax - sax) * (1 - sf), say + (ay - say) * (1 - sf), saz + (az - saz) * (1 - sf)
+
+		-- rotate gravity by inverse gyro rotation
+		gv.x, gv.y, gv.z = qrot_vec(gv.x, gv.y, gv.z, ri_w, ri_x, ri_y, ri_z)
+
+		-- correct gravity toward accelerometer direction
+		local target_x, target_y, target_z = -anx * accel_mag, -any * accel_mag, -anz * accel_mag
+		local gta_x, gta_y, gta_z = target_x - gv.x, target_y - gv.y, target_z - gv.z
+		local gta_len = vlen(gta_x, gta_y, gta_z)
+		if gta_len > 0 then
+			local gdx, gdy, gdz = gta_x / gta_len, gta_y / gta_len, gta_z / gta_len
+
+			-- correction speed: high when still, low when shaking
+			local still_thresh = 0.01
+			local shaky_thresh = 0.4
+			local corr_speed
+			if gyro_state.shakiness < still_thresh then
+				corr_speed = 1.0
+			elseif gyro_state.shakiness > shaky_thresh then
+				corr_speed = 0.1
+			else
+				local t = (gyro_state.shakiness - still_thresh) / (shaky_thresh - still_thresh)
+				corr_speed = 1.0 + (0.1 - 1.0) * t
+			end
+
+			-- clamp by gyro rate so we don't correct faster than we rotate
+			corr_speed = math.min(corr_speed, math.max(angle_speed * 0.1, 0.01))
+
+			local delta = corr_speed * dt
+			if delta < gta_len then
+				gv.x = gv.x + gdx * delta
+				gv.y = gv.y + gdy * delta
+				gv.z = gv.z + gdz * delta
+			else
+				gv.x, gv.y, gv.z = target_x, target_y, target_z
+			end
+		end
+
+		-- correct quaternion tilt using gravity direction
+		local gw, gqx, gqy, gqz
+		do
+			local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
+			gw, gqx, gqy, gqz = q.w/len, q.x/len, q.y/len, q.z/len
+		end
+		local gdir_x, gdir_y, gdir_z = qrot_vec(gv.x, gv.y, gv.z, gw, gqx, gqy, gqz)
+		local _, gux, guy, guz = vnorm(gdir_x, gdir_y, gdir_z)
+		local err_angle = math.acos(math.max(-1, math.min(1, vdot(0, -1, 0, gux, guy, guz))))
+		local flat_x, flat_y, flat_z = vcross(gdir_x, gdir_y, gdir_z, 0, -1, 0)
+		local flat_len = vlen(flat_x, flat_y, flat_z)
+		if flat_len > 1e-6 and err_angle > 1e-6 then
+			local fix_w, fix_x, fix_y, fix_z = qaxis_angle(err_angle, flat_x / flat_len, flat_y / flat_len, flat_z / flat_len)
+			q.w, q.x, q.y, q.z = qmul(fix_w, fix_x, fix_y, fix_z, q.w, q.x, q.y, q.z)
+		end
+	else
+		-- no accel data (freefall): just rotate gravity by gyro
+		gv.x, gv.y, gv.z = qrot_vec(gv.x, gv.y, gv.z, ri_w, ri_x, ri_y, ri_z)
+	end
+
+	-- normalize quaternion
+	do
+		local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
+		q.w, q.x, q.y, q.z = q.w/len, q.x/len, q.y/len, q.z/len
+	end
+end
+
+-- called by Rust on every sensor event (gyro AND accel)
+function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)
+	_gyro_raw.x, _gyro_raw.y, _gyro_raw.z = gx, gy, gz
+	_accel_raw.x, _accel_raw.y, _accel_raw.z = ax, ay, az
+
+	-- auto-init gravity from first valid accel reading
+	if not gyro_state.grav_initialized then
+		local amag = vlen(ax, ay, az)
+		if amag > 0.1 then
+			gyro_state.grav.x = -ax / amag
+			gyro_state.grav.y = -ay / amag
+			gyro_state.grav.z = -az / amag
+			_gravity.x, _gravity.y, _gravity.z = gyro_state.grav.x, gyro_state.grav.y, gyro_state.grav.z
+			gyro_state.grav_initialized = true
+		end
+	end
+
+	if gyro_state.calibrating and is_gyro then
 		gyro_state.cal_samples[#gyro_state.cal_samples + 1] = { x = gx, y = gy, z = gz }
 		if #gyro_state.cal_samples % 100 == 0 then
 			log(1, string.format("calibrating... %d samples collected", #gyro_state.cal_samples))
 		end
-		return {}
+		return
 	end
+
+	local cgx = gx - gyro_state.bias_x
+	local cgy = gy - gyro_state.bias_y
+	local cgz = gz - gyro_state.bias_z
+	gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz = cgx, cgy, cgz
+
+	update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
+
+	_gravity.x, _gravity.y, _gravity.z = gyro_state.grav.x, gyro_state.grav.y, gyro_state.grav.z
+	_orientation.x, _orientation.y, _orientation.z, _orientation.w = gyro_state.quat.x, gyro_state.quat.y, gyro_state.quat.z, gyro_state.quat.w
+end
+
+-- called by Rust on gyro events only
+function process_gyro(gx, gy, gz)
+	if gyro_state.calibrating then return {} end
 	if not gyro_state.active then return {} end
 
 	local now = _now()
 	local dt = gyro_state.last_time and math.min(now - gyro_state.last_time, 0.1) or 0
 	gyro_state.last_time = now
 
-	local rx = gx - gyro_state.bias_x
-	local ry = gy - gyro_state.bias_y
+	local cgx, cgy, cgz = gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz
+	local gv = _gravity
 
-	local pitch_deg = rx * RAD_TO_DEG * dt
-	local yaw_deg   = ry * RAD_TO_DEG * dt
+	if gyro_state.deadzone > 0 and vlen(cgx, cgy, cgz) * RAD_TO_DEG < gyro_state.deadzone then
+		gyro_state.accum_x = 0
+		gyro_state.accum_y = 0
+		return {}
+	end
 
-	local dx = -yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
-	local dy = -pitch_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+	local dx, dy
+
+	if gyro_state.space == "player" then
+		-- JSM CalculatePlayerSpaceGyro
+		local world_yaw = -(gv.y * cgy + gv.z * cgz)
+		local sign = world_yaw < 0 and -1 or 1
+		local yaw_rate = sign * math.min(math.abs(world_yaw) * 1.41, math.sqrt(cgy * cgy + cgz * cgz))
+		local yaw_deg = yaw_rate * RAD_TO_DEG * dt
+		dx = -yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
+		dy = -cgx * RAD_TO_DEG * dt * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+	elseif gyro_state.space == "world" then
+		-- JSM CalculateWorldSpaceGyro
+		local world_yaw_deg = -(gv.x * cgx + gv.y * cgy + gv.z * cgz) * RAD_TO_DEG * dt
+		local gdpx = gv.x
+		local pax, pay, paz = 1 - gv.x * gdpx, -gv.y * gdpx, -gv.z * gdpx
+		local pa_len2 = pax * pax + pay * pay + paz * paz
+		if pa_len2 > 0 then
+			local pa_len = math.sqrt(pa_len2)
+			pax, pay, paz = pax / pa_len, pay / pa_len, paz / pa_len
+			local side_max = math.max(math.abs(gv.y), math.abs(gv.z))
+			local sr = 0.125
+			local side_reduction = side_max <= sr and 0 or math.min((side_max - sr) / sr, 1)
+			local side_deg = (pax * cgx + pay * cgy + paz * cgz) * RAD_TO_DEG * dt
+			dy = -side_reduction * side_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+		else
+			dy = 0
+		end
+		dx = -world_yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
+	elseif gyro_state.space == "local_yaw" then
+		-- yaw controls horizontal, pitch controls vertical
+		local pitch_deg = cgx * RAD_TO_DEG * dt
+		local yaw_deg   = cgy * RAD_TO_DEG * dt
+		dx = -yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
+		dy = -pitch_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+	else
+		-- local_roll: pitch controls vertical, roll controls horizontal, yaw ignored
+		local pitch_deg = cgx * RAD_TO_DEG * dt
+		local roll_deg  = cgz * RAD_TO_DEG * dt
+		dx = -roll_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
+		dy = -pitch_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+	end
 
 	gyro_state.accum_x = gyro_state.accum_x + dx
 	gyro_state.accum_y = gyro_state.accum_y + dy
@@ -116,10 +361,25 @@ end
 function gyro_reset()
 	gyro_state.bias_x = 0
 	gyro_state.bias_y = 0
+	gyro_state.bias_z = 0
 	gyro_state.calibrating = false
 	gyro_state.cal_samples = {}
 	gyro_state.hold_button = nil
 	gyro_state.active = false
 	gyro_state.accum_x = 0
 	gyro_state.accum_y = 0
+	gyro_state.quat = { w = 1, x = 0, y = 0, z = 0 }
+	gyro_state.grav = { x = 0, y = 0, z = 0 }
+	gyro_state.grav_initialized = false
+	gyro_state.shakiness = 0
+	gyro_state.smooth_accel = { x = 0, y = 0, z = 0 }
+	gyro_state.sensor_last_time = nil
+	gyro_state.deadzone = 0
+	gyro_state.space = "local_yaw"
+	gyro_state.cal_gx = 0
+	gyro_state.cal_gy = 0
+	gyro_state.cal_gz = 0
+
+	_gravity.x, _gravity.y, _gravity.z = 0, 0, 0
+	_orientation.w, _orientation.x, _orientation.y, _orientation.z = 1, 0, 0, 0
 end
