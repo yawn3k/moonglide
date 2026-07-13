@@ -13,6 +13,12 @@ function on_btn_down(btn)
 	::found::
 
 	for _, chord in ipairs(chords) do
+		local is_in_chord = false
+		for _, b in ipairs(chord.buttons) do
+			if b == btn then is_in_chord = true; break end
+		end
+		if not is_in_chord then goto continue end
+
 		local ok = true
 		for _, b in ipairs(chord.buttons) do
 			local found = false
@@ -29,6 +35,7 @@ function on_btn_down(btn)
 			end
 			return
 		end
+		::continue::
 	end
 
 	-- double-press check
