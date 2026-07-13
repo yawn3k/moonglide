@@ -6,6 +6,7 @@ mod mapping;
 mod output;
 mod output_devices;
 
+mod frame_pacer;
 mod style;
 
 use std::collections::HashMap;
@@ -128,8 +129,7 @@ fn main() {
 	println!("{}", style::dim("Type Lua commands in the terminal."));
 
 	let mut pending: Vec<PendingThread> = Vec::new();
-	let frame_dur = std::time::Duration::from_secs_f64(1.0 / 1000.0);
-	let mut next_frame = std::time::Instant::now();
+	let mut pacer = frame_pacer::FramePacer::new(1000.0);
 
 	let (repl_tx, repl_rx): (Sender<String>, Receiver<String>) = std::sync::mpsc::channel();
 	let repl_running = Arc::new(AtomicBool::new(true));
@@ -254,10 +254,7 @@ fn main() {
 
 		state.dev.synchronize_all();
 
-		next_frame += frame_dur;
-		if let Some(sleep) = next_frame.checked_duration_since(std::time::Instant::now()) {
-			std::thread::sleep(sleep);
-		}
+		pacer.wait();
 	}
 
 	state.mapper.lock().unwrap().release_all();
