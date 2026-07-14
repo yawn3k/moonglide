@@ -22,6 +22,7 @@ local function ref_val(v)
 end
 
 local function extract_action(action)
+	if action == nil then error("bind.*: action is nil", 2) end
 	if type(action) == "function" then
 		return action
 	end
@@ -30,6 +31,7 @@ local function extract_action(action)
 end
 
 local function extract_instant_action(action)
+	if action == nil then error("bind.*: action is nil", 2) end
 	if type(action) == "function" then
 		return action
 	end
@@ -43,6 +45,7 @@ bind = {}
 
 function bind.press(btn, action)
 	btn = ref_val(btn)
+	if btn == nil then error("bind.press: button resolves to nil — check your spelling", 2) end
 	local e = button_bindings[btn] or {}
 	e.press = extract_action(action)
 	button_bindings[btn] = e
@@ -50,6 +53,7 @@ end
 
 function bind.tap(btn, action)
 	btn = ref_val(btn)
+	if btn == nil then error("bind.tap: button resolves to nil — check your spelling", 2) end
 	local e = button_bindings[btn] or {}
 	e.tap = extract_instant_action(action)
 	button_bindings[btn] = e
@@ -57,6 +61,7 @@ end
 
 function bind.hold(btn, action, opts)
 	btn = ref_val(btn)
+	if btn == nil then error("bind.hold: button resolves to nil — check your spelling", 2) end
 	local e = button_bindings[btn] or {}
 	e.hold = extract_action(action)
 	e.hold_delay = (opts and opts.delay) or (hold_press_time or 400)
@@ -66,6 +71,7 @@ end
 
 function bind.release(btn, action)
 	btn = ref_val(btn)
+	if btn == nil then error("bind.release: button resolves to nil — check your spelling", 2) end
 	local e = button_bindings[btn] or {}
 	e.release = extract_instant_action(action)
 	button_bindings[btn] = e
@@ -73,6 +79,7 @@ end
 
 function bind.turbo(btn, action)
 	btn = ref_val(btn)
+	if btn == nil then error("bind.turbo: button resolves to nil — check your spelling", 2) end
 	local e = button_bindings[btn] or {}
 	e.turbo = extract_instant_action(action)
 	e._last_turbo = 0
@@ -82,13 +89,16 @@ end
 function bind.chord(buttons, action)
 	local names = {}
 	for _, b in ipairs(buttons) do
-		table.insert(names, ref_val(b))
+		local r = ref_val(b)
+		if r == nil then error("bind.chord: button resolves to nil in chord table", 2) end
+		table.insert(names, r)
 	end
 	table.insert(chords, { buttons = names, func = extract_action(action) })
 end
 
 function bind.double_press(btn, action, opts)
 	btn = ref_val(btn)
+	if btn == nil then error("bind.double_press: button resolves to nil", 2) end
 	local window = (opts and opts.window) or (double_press_window or 200)
 	table.insert(double_presses, { button = btn, func = extract_instant_action(action), window_ms = window })
 end
@@ -96,9 +106,12 @@ end
 function bind.modeshift(modifiers, btn, action)
 	local mods = {}
 	for _, m in ipairs(modifiers) do
-		table.insert(mods, ref_val(m))
+		local r = ref_val(m)
+		if r == nil then error("bind.modeshift: modifier resolves to nil in modifiers table", 2) end
+		table.insert(mods, r)
 	end
 	btn = ref_val(btn)
+	if btn == nil then error("bind.modeshift: button resolves to nil", 2) end
 	table.insert(modeshifts, { modifiers = mods, button = btn, func = extract_action(action) })
 end
 

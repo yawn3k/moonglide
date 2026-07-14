@@ -5,7 +5,7 @@ local function make_ref(src, field, val)
 	return { __kind = "ref", src = src, field = field, val = val }
 end
 
-con = {
+con = setmetatable({
 	a = make_ref("con", "a", "a"),
 	b = make_ref("con", "b", "b"),
 	x = make_ref("con", "x", "x"),
@@ -42,9 +42,11 @@ con = {
 	left_ring_outer = make_ref("con", "left_ring_outer", "left_ring_outer"),
 	right_ring_inner = make_ref("con", "right_ring_inner", "right_ring_inner"),
 	right_ring_outer = make_ref("con", "right_ring_outer", "right_ring_outer"),
-}
+}, { __index = function(_, k)
+	error("unknown button '" .. tostring(k) .. "' — check spelling", 2)
+end })
 
-key = {
+key = setmetatable({
 	esc = make_ref("key", "esc", "esc"),
 	["1"] = make_ref("key", "1", "1"),
 	["2"] = make_ref("key", "2", "2"),
@@ -141,10 +143,14 @@ key = {
 	seven = make_ref("key", "seven", "7"),
 	eight = make_ref("key", "eight", "8"),
 	nine = make_ref("key", "nine", "9"),
-}
+}, { __index = function(_, k)
+	error("unknown key '" .. tostring(k) .. "' — check spelling", 2)
+end })
 
-mouse = {
+mouse = setmetatable({
 	left = make_ref("mouse", "left", "left_mouse"),
 	right = make_ref("mouse", "right", "right_mouse"),
 	middle = make_ref("mouse", "middle", "middle_mouse"),
-}
+}, { __index = function(_, k)
+	error("unknown mouse button '" .. tostring(k) .. "' — check spelling", 2)
+end })
