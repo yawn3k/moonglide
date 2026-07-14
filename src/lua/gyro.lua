@@ -101,6 +101,14 @@ function gyro(tbl)
 	end
 end
 
+function gyro_get_bias()
+	return gyro_state.bias_x, gyro_state.bias_y, gyro_state.bias_z
+end
+
+function gyro_get_state()
+	return gyro_state.active, gyro_state.space, gyro_state.deadzone
+end
+
 function gyro_enable()
 	gyro_state.hold_button = nil
 	gyro_state.active = true
