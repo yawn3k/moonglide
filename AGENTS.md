@@ -170,7 +170,7 @@ Internally:
 - **Four spaces**: `local_yaw` (default, yaw→X pitch→Y), `local_roll` (roll→X pitch→Y), `player` (world-horizontal yaw + local pitch via JSM), `world` (both axes world-relative via JSM)
 - **Sensor fusion**: JSM-style complementary filter — gyro rotation → quaternion → accel smoothing + shakiness → gravity correction → quaternion tilt correction
 - **on_sensor_event()** called on every gyro AND accel event (~2000 Hz combined): updates `_gravity`/`_orientation`/`_gyro_raw`/`_accel_raw` globals, handles calibration samples (gated on `is_gyro`), runs bias subtraction, drives fusion
-- **Gyro deadzone**: configurable in deg/s, suppresses output and zeros accum below threshold
+- **Gyro deadzone**: configurable in deg/s (`GYRO_CUTOFF_SPEED`), suppresses output below threshold on per-frame velocity (2D magnitude after space transform)
 - Bias subtraction: `value - bias` for X, Y, Z axes
 - Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias (now 3 axes including Z)
 - Gravity auto-initialized from first valid accelerometer reading — no hardcoded orientation guess
@@ -221,5 +221,5 @@ Set via the `gyro(tbl)` function in config:
 | `sensitivity` / `gyro_sens` | 1.0 | Multiplier (single or `{h, v}`) |
 | `calibration` | 45.454 | RWS factor (CS2 baseline) |
 | `in_game_sens` | 1.0 | Game's mouse sensitivity value |
-| `deadzone` | 0 | Gyro deadzone in deg/s |
+| `deadzone` | 0 | Gyro cutoff speed in deg/s (JSM `GYRO_CUTOFF_SPEED`) |
 | `space` | `"local_yaw"` | One of: `local_yaw`, `local_roll`, `player`, `world` |

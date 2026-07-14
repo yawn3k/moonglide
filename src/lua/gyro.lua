@@ -305,25 +305,18 @@ function process_gyro(gx, gy, gz)
 	local cgx, cgy, cgz = gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz
 	local gv = _gravity
 
-	if gyro_state.deadzone > 0 and vlen(cgx, cgy, cgz) * RAD_TO_DEG < gyro_state.deadzone then
-		gyro_state.accum_x = 0
-		gyro_state.accum_y = 0
-		return {}
-	end
-
-	local dx, dy
+	local deg_x_s, deg_y_s
 
 	if gyro_state.space == "player" then
 		-- JSM CalculatePlayerSpaceGyro
 		local world_yaw = -(gv.y * cgy + gv.z * cgz)
 		local sign = world_yaw < 0 and -1 or 1
 		local yaw_rate = sign * math.min(math.abs(world_yaw) * 1.41, math.sqrt(cgy * cgy + cgz * cgz))
-		local yaw_deg = yaw_rate * RAD_TO_DEG * dt
-		dx = -yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
-		dy = -cgx * RAD_TO_DEG * dt * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+		deg_x_s = -yaw_rate * RAD_TO_DEG
+		deg_y_s = -cgx * RAD_TO_DEG
 	elseif gyro_state.space == "world" then
 		-- JSM CalculateWorldSpaceGyro
-		local world_yaw_deg = -(gv.x * cgx + gv.y * cgy + gv.z * cgz) * RAD_TO_DEG * dt
+		deg_x_s = -(gv.x * cgx + gv.y * cgy + gv.z * cgz) * RAD_TO_DEG
 		local gdpx = gv.x
 		local pax, pay, paz = 1 - gv.x * gdpx, -gv.y * gdpx, -gv.z * gdpx
 		local pa_len2 = pax * pax + pay * pay + paz * paz
@@ -333,25 +326,30 @@ function process_gyro(gx, gy, gz)
 			local side_max = math.max(math.abs(gv.y), math.abs(gv.z))
 			local sr = 0.125
 			local side_reduction = side_max <= sr and 0 or math.min((side_max - sr) / sr, 1)
-			local side_deg = (pax * cgx + pay * cgy + paz * cgz) * RAD_TO_DEG * dt
-			dy = -side_reduction * side_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+			deg_y_s = -side_reduction * (pax * cgx + pay * cgy + paz * cgz) * RAD_TO_DEG
 		else
-			dy = 0
+			deg_y_s = 0
 		end
-		dx = -world_yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
 	elseif gyro_state.space == "local_yaw" then
-		-- yaw controls horizontal, pitch controls vertical
-		local pitch_deg = cgx * RAD_TO_DEG * dt
-		local yaw_deg   = cgy * RAD_TO_DEG * dt
-		dx = -yaw_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
-		dy = -pitch_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+		deg_x_s = -cgy * RAD_TO_DEG
+		deg_y_s = -cgx * RAD_TO_DEG
 	else
-		-- local_roll: pitch controls vertical, roll controls horizontal, yaw ignored
-		local pitch_deg = cgx * RAD_TO_DEG * dt
-		local roll_deg  = cgz * RAD_TO_DEG * dt
-		dx = -roll_deg * gyro_state.calibration * gyro_state.sens_h / gyro_state.in_game_sens
-		dy = -pitch_deg * gyro_state.calibration * gyro_state.sens_v / gyro_state.in_game_sens
+		-- local_roll
+		deg_x_s = -cgz * RAD_TO_DEG
+		deg_y_s = -cgx * RAD_TO_DEG
 	end
+
+	local dz = gyro_state.deadzone
+	if dz and dz > 0 then
+		local mag = math.sqrt(deg_x_s * deg_x_s + deg_y_s * deg_y_s)
+		if mag < dz then
+			deg_x_s, deg_y_s = 0, 0
+		end
+	end
+
+	local conv = gyro_state.calibration / gyro_state.in_game_sens
+	local dx = deg_x_s * dt * conv * gyro_state.sens_h
+	local dy = deg_y_s * dt * conv * gyro_state.sens_v
 
 	gyro_state.accum_x = gyro_state.accum_x + dx
 	gyro_state.accum_y = gyro_state.accum_y + dy

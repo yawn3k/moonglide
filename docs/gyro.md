@@ -90,4 +90,4 @@ Updated every sensor event (~2000 Hz combined gyro + accel):
 
 ## Deadzone
 
-`gyro { deadzone = 2 }` — suppresses all mouse output when the combined angular speed (all axes) is below the threshold in deg/s. Accumulators are zeroed, so no jump when crossing back out.
+`gyro { deadzone = 2 }` — JSM-style `GYRO_CUTOFF_SPEED`. When the 2D output velocity magnitude (after space transform) is below the threshold in deg/s, per-frame output is zeroed. Below threshold → zero output; above → full output. Hard gate, no ramp. Works per-frame on velocity (not accumulator), so no jump when crossing back out.
