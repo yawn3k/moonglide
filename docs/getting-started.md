@@ -47,6 +47,14 @@ While it's running, type Lua commands in the terminal (REPL) to adjust on the fl
 
 Press **Escape** to quit.
 
+Reload or switch configs without restarting:
+
+```lua
+> reload()                    -- re-read CLI config from disk
+> reset()                     -- clear everything to defaults
+> dofile("./other.lua")       -- load a different config
+```
+
 ## Building from source
 
 ```bash

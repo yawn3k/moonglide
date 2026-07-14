@@ -1,4 +1,16 @@
+use std::sync::Mutex;
+
 use mlua::Lua;
+
+static CONFIG_PATH: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn set_config_path(path: &str) {
+	*CONFIG_PATH.lock().unwrap() = Some(path.to_string());
+}
+
+pub fn get_config_path() -> Option<String> {
+	CONFIG_PATH.lock().unwrap().clone()
+}
 
 pub fn setup_dsl(lua: &Lua) -> Result<(), String> {
 	lua.load(format!(
@@ -26,6 +38,7 @@ pub fn init_bare(lua: &Lua) {
 }
 
 pub fn load(path: &str, lua: &Lua) -> Result<(), String> {
+	set_config_path(path);
 	let abs = std::path::Path::new(path)
 		.canonicalize()
 		.map_err(|e| format!("canonicalize {}: {}", path, e))?;

@@ -103,6 +103,22 @@ Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The
 
 `init_bare()` sets `package.path` to `./?.lua`. `load(path)` prepends the config file's directory to `package.path`, then executes the file. No Rust-side struct conversion — all binding logic stays in Lua.
 
+## Config Management
+
+Available from the REPL or from any config:
+
+| Function | Description |
+|----------|-------------|
+| `reset()` | Clear all bindings, gyro state, stick state, config globals, and release all held keys. Re-runs the DSL to reset all Lua-side state. |
+| `reload()` | Same as `reset()`, then re-loads the CLI config file from disk. No-op if no config was given at launch. |
+
+```lua
+> reset()
+> dofile("path/to/new-config.lua")
+
+> reload()  -- re-reads the CLI config from disk
+```
+
 All five functions are globals — your config can override any of them by defining a new function with the same name. Wrap a built-in by capturing it in a local first: `local builtin = process_gyro` then define your own `process_gyro(...)` that calls it. To restore defaults, reassign from the saved local. See the source files in `src/lua/` for each function's exact contract.
 
 Typed ref actions (e.g. `bind.press(con.a, key.space)`) are auto-wrapped as Lua functions via `extract_action()` / `extract_instant_action()` in `bindings.lua`:

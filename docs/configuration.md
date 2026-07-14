@@ -48,7 +48,7 @@ After each REPL command, the following globals are re-read and applied immediate
 - `right_stick_inner_deadzone`, `right_stick_outer_deadzone`
 - `left_ring_position`, `right_ring_position`
 - Any `bind.*` calls
-- `reset()`, `gyro_*` calls
+- `reset()`, `reload()`, `gyro_*` calls
 
 Only `hold_press_time` is read at config load only (not re-read from REPL).
 
@@ -56,7 +56,8 @@ Only `hold_press_time` is read at config load only (not re-read from REPL).
 
 | Command | Effect |
 |---------|--------|
-| `reset()` | Clear all bindings, release held keys |
+| `reset()` | Clear all bindings, gyro state, stick state, config globals; release all held keys |
+| `reload()` | Same as `reset()`, then re-load the CLI config file from disk |
 | `gyro_enable()` / `gyro_disable()` | Toggle gyro on/off |
 | `gyro_calibrate_start()` / `gyro_calibrate_stop()` | Run gyro bias calibration |
 
@@ -78,13 +79,13 @@ return {
 }
 ```
 
-## `reset()` — clearing bindings
+## `reset()` — resetting to defaults
 
 ```lua
-reset()         -- removes all bindings, releases all held keys
+reset()         -- clears all bindings, gyro, sticks, config globals; releases all held keys
 ```
 
-Useful from the REPL to reload config:
+Clears everything set by the config back to defaults. Used from the REPL to load a different config:
 
 ```lua
 > reset()
@@ -93,14 +94,29 @@ Useful from the REPL to reload config:
 > ok
 ```
 
-Or inside a binding as a panic button:
+Or as a panic button:
 
 ```lua
 bind.press(con.guide, function()
     reset()
-    print("all bindings cleared")
+    print("everything cleared")
 end)
 ```
+
+## `reload()` — reset and re-load CLI config
+
+```lua
+reload()        -- same as reset(), then re-reads the CLI config file from disk
+```
+
+Convenience function that combines `reset()` with re-loading the config specified on the command line (`moonglide ./config.lua`). Useful after editing your config without restarting:
+
+```lua
+> reload()
+> ok
+```
+
+A no-op (just reset) if no config was specified at launch.
 
 ## Timing globals
 
