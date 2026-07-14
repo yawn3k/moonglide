@@ -78,3 +78,10 @@ cargo run --release -- ./config.lua
 On Windows, Moonglide uses `SendInput` for mouse and keyboard output (no driver
 needed) and compiles Lua 5.4 from source. No system-wide dependencies beyond
 the prerequisites above.
+
+## Planned Features
+
+- Analog stick to mouse
+- Virtual controller
+- REPL improvements
+- Full touchapd remapping and support
