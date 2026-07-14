@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use mlua::Lua;
+use mlua::{Lua, Nil};
 
 use crate::log_msg;
 use crate::mapping::Mapper;
@@ -116,8 +116,35 @@ pub fn register_api(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 	{
 		let m = mapper.clone();
 		let reset_fn = lua
-			.create_function(move |_, ()| -> mlua::Result<()> {
+			.create_function(move |lua: &Lua, ()| -> mlua::Result<()> {
 				m.lock().unwrap().release_all();
+
+				crate::config::setup_dsl(lua)
+					.map_err(|e| mlua::Error::runtime(e))?;
+
+				let g = lua.globals();
+				g.set("log_level", 0)?;
+				g.set("instant_press_time", 40)?;
+				g.set("hold_press_time", 400)?;
+				g.set("double_press_window", 200)?;
+				g.set("trigger_threshold", 3000)?;
+				g.set("left_stick_inner_deadzone", 0.15)?;
+				g.set("left_stick_outer_deadzone", 1.0)?;
+				g.set("right_stick_inner_deadzone", 0.15)?;
+				g.set("right_stick_outer_deadzone", 1.0)?;
+				g.set("left_ring_position", 0.8)?;
+				g.set("right_ring_position", 0.8)?;
+				g.set("update", Nil)?;
+
+				for name in &["_gyro_raw", "_accel_raw", "_gravity"] {
+					if let Ok(t) = g.get::<mlua::Table>(*name) {
+						t.set("x", 0)?; t.set("y", 0)?; t.set("z", 0)?;
+					}
+				}
+				if let Ok(t) = g.get::<mlua::Table>("_orientation") {
+					t.set("w", 1)?; t.set("x", 0)?; t.set("y", 0)?; t.set("z", 0)?;
+				}
+
 				Ok(())
 			})
 			.unwrap();
