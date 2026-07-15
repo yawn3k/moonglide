@@ -21,7 +21,6 @@ impl OutputDevices {
 						if press { let _ = kbd.press(key); } else { let _ = kbd.release(key); }
 					}
 				}
-				let _ = kbd.synchronize();
 			}
 		}
 	}
