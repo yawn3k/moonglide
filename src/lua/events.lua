@@ -206,18 +206,6 @@ function on_update()
 		end
 	end
 
-	-- turbo
-	for btn, e in pairs(button_bindings) do
-		if e.turbo and _is_held(btn) then
-			local last = e._last_turbo or 0
-			if _now() - last >= 0.1 then
-				e._last_turbo = _now()
-				_current_btn = btn
-				e.turbo()
-			end
-		end
-	end
-
 	-- instant release timers
 	for k, t in pairs(instant_times) do
 		if (_now() - t.at) * 1000 >= t.delay then

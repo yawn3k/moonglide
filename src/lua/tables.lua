@@ -151,6 +151,8 @@ mouse = setmetatable({
 	left = make_ref("mouse", "left", "left_mouse"),
 	right = make_ref("mouse", "right", "right_mouse"),
 	middle = make_ref("mouse", "middle", "middle_mouse"),
+	wheel_up = make_ref("mouse", "wheel_up", "wheel_up"),
+	wheel_down = make_ref("mouse", "wheel_down", "wheel_down"),
 }, { __index = function(_, k)
 	error("unknown mouse button '" .. tostring(k) .. "' — check spelling", 2)
 end })

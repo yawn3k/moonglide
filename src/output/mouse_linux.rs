@@ -35,6 +35,12 @@ impl VirtualMouse {
 			.map_err(|e| format!("move y: {}", e))
 	}
 
+	pub fn scroll(&mut self, amount: i32) -> Result<(), String> {
+		self.device
+			.send(Wheel::Vertical, amount)
+			.map_err(|e| format!("scroll: {}", e))
+	}
+
 	pub fn synchronize(&mut self) -> Result<(), String> {
 		self.device
 			.synchronize()

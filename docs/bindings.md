@@ -90,16 +90,6 @@ String shorthand auto-wraps as `instant(...)`:
 bind.release(con.b, key.left_alt)  -- same as → function() instant(key.left_alt) end
 ```
 
-### `bind.turbo(button, action)`
-
-Fires repeatedly at ~100 ms while the button is held.
-
-```lua
-bind.turbo(con.right_shoulder, function()
-    instant(mouse.left)
-end)
-```
-
 ### `bind.chord({buttons}, action)`
 
 Fires when **all** specified buttons are held simultaneously. Individual button press and release bindings for the chorded buttons are suppressed while the chord is active.
@@ -201,16 +191,6 @@ Alternate a key between held and released on each press.
 ```lua
 bind.tap(con.start, function()
     toggle(key.left_meta)
-end)
-```
-
-### `turbo(key)`
-
-Rapid-pulse a key at ~100 ms while the binding button is held.
-
-```lua
-bind.press(con.right_stick, function()
-    turbo(mouse.left)
 end)
 ```
 

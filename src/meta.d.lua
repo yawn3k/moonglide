@@ -198,10 +198,6 @@ function release(key) end
 ---@param key string
 function toggle(key) end
 
---- Rapid-pulse a key at ~100ms while the binding button is held.
----@param key string
-function turbo(key) end
-
 --- Check if a button is currently held.
 ---@param button string
 ---@return boolean
@@ -222,7 +218,6 @@ _current_btn = ""
 --- @field tap fun(button: string, action: string|fun())
 --- @field hold fun(button: string, action: string|fun(), opts?: binding_opts)
 --- @field release fun(button: string, action: string|fun())
---- @field turbo fun(button: string, action: string|fun())
 --- @field chord fun(buttons: string[], action: string|fun())
 --- @field double_press fun(button: string, action: string|fun(), opts?: double_press_opts)
 --- @field modeshift fun(modifiers: string[], button: string, action: string|fun())

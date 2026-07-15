@@ -1,7 +1,7 @@
 -- binding library
 -- defines bind.* and user-facing helpers
 
-local button_bindings = {}   -- btn -> { press=fn, release=fn, tap=fn, hold=fn, hold_delay=ms, turbo=fn }
+local button_bindings = {}   -- btn -> { press=fn, release=fn, tap=fn, hold=fn, hold_delay=ms }
 local chords = {}            -- { buttons={...}, func=fn }
 local double_presses = {}    -- { button=btn, func=fn, window_ms=ms }
 local modeshifts = {}        -- { modifiers={...}, button=btn, func=fn }
@@ -77,15 +77,6 @@ function bind.release(btn, action)
 	button_bindings[btn] = e
 end
 
-function bind.turbo(btn, action)
-	btn = ref_val(btn)
-	if btn == nil then error("bind.turbo: button resolves to nil — check your spelling", 2) end
-	local e = button_bindings[btn] or {}
-	e.turbo = extract_instant_action(action)
-	e._last_turbo = 0
-	button_bindings[btn] = e
-end
-
 function bind.chord(buttons, action)
 	local names = {}
 	for _, b in ipairs(buttons) do
@@ -141,6 +132,7 @@ end
 
 function instant(key, opts)
 	local raw = ref_val(key)
+	_release_key(raw)
 	_press_key(raw)
 	local delay = (opts and opts.press_time) or (instant_press_time or 40)
 	instant_times[raw] = { at = _now(), delay = delay }
@@ -157,17 +149,6 @@ function toggle(key)
 	end
 end
 
-function turbo(key)
-	local raw = ref_val(key)
-	local btn = _current_btn
-	if btn and btn ~= "" then
-		local e = button_bindings[btn] or {}
-		e.turbo = function() instant(raw) end
-		e._last_turbo = 0
-		button_bindings[btn] = e
-	end
-end
-
 function held(btn)
 	return _is_held(ref_val(btn))
 end
@@ -178,5 +159,27 @@ function wait(seconds)
 	_current_btn = saved
 end
 
+-- ── unbind.* helpers ──
+
+unbind = {}
+
+local function clear_binding(btn, field)
+    btn = ref_val(btn)
+    if btn == nil then error("unbind: button resolves to nil", 2) end
+    local e = button_bindings[btn]
+    if e then
+        e[field] = nil
+        if not e.press and not e.release and not e.tap and not e.hold then
+            button_bindings[btn] = nil
+        end
+    end
+end
+
+function unbind.press(btn)    clear_binding(btn, "press") end
+function unbind.release(btn)  clear_binding(btn, "release") end
+function unbind.tap(btn)      clear_binding(btn, "tap") end
+function unbind.hold(btn)     clear_binding(btn, "hold");
+    hold_timers[ref_val(btn)] = nil
+end
 -- toggled state
 _toggled = {}

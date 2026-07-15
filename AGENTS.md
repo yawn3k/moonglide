@@ -99,7 +99,7 @@ Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The
 - `process_steicks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
 - `process_gyro()` — four gyro spaces, deadzone, calibration, enable/disable (`gyro.lua`)
 - `on_sensor_event()` — fusion, gravity auto-init, bias subtraction (`gyro.lua`)
-- `on_btn_down/up/update` — event dispatching (chords, modeshift, DP, turbo, hold timers) (`events.lua`)
+- `on_btn_down/up/update` — event dispatching (chords, modeshift, DP, hold timers) (`events.lua`)
 
 `init_bare()` sets `package.path` to `./?.lua`. `load(path)` prepends the config file's directory to `package.path`, then executes the file. No Rust-side struct conversion — all binding logic stays in Lua.
 
