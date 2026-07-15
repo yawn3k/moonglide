@@ -2,26 +2,19 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEINPUT, MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL,
 };
 
-pub struct VirtualMouse {
-    accum_x: f64,
-    accum_y: f64,
-}
+pub struct VirtualMouse;
 
 impl VirtualMouse {
     pub fn new() -> Result<Self, String> {
-        Ok(Self { accum_x: 0.0, accum_y: 0.0 })
+        Ok(Self)
     }
 
     pub fn move_mouse(&mut self, dx: f64, dy: f64) -> Result<(), String> {
-        self.accum_x += dx;
-        self.accum_y += dy;
-        let ix = self.accum_x as i32;
-        let iy = self.accum_y as i32;
+        let ix = dx as i32;
+        let iy = dy as i32;
         if ix == 0 && iy == 0 {
             return Ok(());
         }
-        self.accum_x -= ix as f64;
-        self.accum_y -= iy as f64;
 
         let mi = MOUSEINPUT {
             dx: ix,

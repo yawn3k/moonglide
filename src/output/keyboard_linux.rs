@@ -1,103 +1,100 @@
-use std::collections::HashMap;
-
 use uinput::event::controller::Mouse;
 use uinput::event::keyboard::Key;
 
-fn build_key_map() -> HashMap<&'static str, Key> {
-	let mut m = HashMap::new();
-	m.insert("reserved", Key::Reserved);
-	m.insert("esc", Key::Esc);
-	m.insert("1", Key::_1);
-	m.insert("2", Key::_2);
-	m.insert("3", Key::_3);
-	m.insert("4", Key::_4);
-	m.insert("5", Key::_5);
-	m.insert("6", Key::_6);
-	m.insert("7", Key::_7);
-	m.insert("8", Key::_8);
-	m.insert("9", Key::_9);
-	m.insert("0", Key::_0);
-	m.insert("minus", Key::Minus);
-	m.insert("equal", Key::Equal);
-	m.insert("backspace", Key::BackSpace);
-	m.insert("tab", Key::Tab);
-	m.insert("q", Key::Q);
-	m.insert("w", Key::W);
-	m.insert("e", Key::E);
-	m.insert("r", Key::R);
-	m.insert("t", Key::T);
-	m.insert("y", Key::Y);
-	m.insert("u", Key::U);
-	m.insert("i", Key::I);
-	m.insert("o", Key::O);
-	m.insert("p", Key::P);
-	m.insert("leftbrace", Key::LeftBrace);
-	m.insert("rightbrace", Key::RightBrace);
-	m.insert("enter", Key::Enter);
-	m.insert("left_control", Key::LeftControl);
-	m.insert("a", Key::A);
-	m.insert("s", Key::S);
-	m.insert("d", Key::D);
-	m.insert("f", Key::F);
-	m.insert("g", Key::G);
-	m.insert("h", Key::H);
-	m.insert("j", Key::J);
-	m.insert("k", Key::K);
-	m.insert("l", Key::L);
-	m.insert("semicolon", Key::SemiColon);
-	m.insert("apostrophe", Key::Apostrophe);
-	m.insert("grave", Key::Grave);
-	m.insert("left_shift", Key::LeftShift);
-	m.insert("backslash", Key::BackSlash);
-	m.insert("z", Key::Z);
-	m.insert("x", Key::X);
-	m.insert("c", Key::C);
-	m.insert("v", Key::V);
-	m.insert("b", Key::B);
-	m.insert("n", Key::N);
-	m.insert("m", Key::M);
-	m.insert("comma", Key::Comma);
-	m.insert("dot", Key::Dot);
-	m.insert("slash", Key::Slash);
-	m.insert("right_shift", Key::RightShift);
-	m.insert("left_alt", Key::LeftAlt);
-	m.insert("space", Key::Space);
-	m.insert("caps_lock", Key::CapsLock);
-	m.insert("f1", Key::F1);
-	m.insert("f2", Key::F2);
-	m.insert("f3", Key::F3);
-	m.insert("f4", Key::F4);
-	m.insert("f5", Key::F5);
-	m.insert("f6", Key::F6);
-	m.insert("f7", Key::F7);
-	m.insert("f8", Key::F8);
-	m.insert("f9", Key::F9);
-	m.insert("f10", Key::F10);
-	m.insert("f11", Key::F11);
-	m.insert("f12", Key::F12);
-	m.insert("num_lock", Key::NumLock);
-	m.insert("scroll_lock", Key::ScrollLock);
-	m.insert("right_control", Key::RightControl);
-	m.insert("sysrq", Key::SysRq);
-	m.insert("right_alt", Key::RightAlt);
-	m.insert("home", Key::Home);
-	m.insert("up", Key::Up);
-	m.insert("page_up", Key::PageUp);
-	m.insert("left", Key::Left);
-	m.insert("right", Key::Right);
-	m.insert("end", Key::End);
-	m.insert("down", Key::Down);
-	m.insert("page_down", Key::PageDown);
-	m.insert("insert", Key::Insert);
-	m.insert("delete", Key::Delete);
-	m.insert("left_meta", Key::LeftMeta);
-	m.insert("right_meta", Key::RightMeta);
-	m
+fn key_from_name(name: &str) -> Option<Key> {
+	match name.to_lowercase().as_str() {
+		"esc" => Some(Key::Esc),
+		"1" => Some(Key::_1),
+		"2" => Some(Key::_2),
+		"3" => Some(Key::_3),
+		"4" => Some(Key::_4),
+		"5" => Some(Key::_5),
+		"6" => Some(Key::_6),
+		"7" => Some(Key::_7),
+		"8" => Some(Key::_8),
+		"9" => Some(Key::_9),
+		"0" => Some(Key::_0),
+		"minus" => Some(Key::Minus),
+		"equal" => Some(Key::Equal),
+		"backspace" => Some(Key::BackSpace),
+		"tab" => Some(Key::Tab),
+		"q" => Some(Key::Q),
+		"w" => Some(Key::W),
+		"e" => Some(Key::E),
+		"r" => Some(Key::R),
+		"t" => Some(Key::T),
+		"y" => Some(Key::Y),
+		"u" => Some(Key::U),
+		"i" => Some(Key::I),
+		"o" => Some(Key::O),
+		"p" => Some(Key::P),
+		"leftbrace" => Some(Key::LeftBrace),
+		"rightbrace" => Some(Key::RightBrace),
+		"enter" => Some(Key::Enter),
+		"left_control" => Some(Key::LeftControl),
+		"a" => Some(Key::A),
+		"s" => Some(Key::S),
+		"d" => Some(Key::D),
+		"f" => Some(Key::F),
+		"g" => Some(Key::G),
+		"h" => Some(Key::H),
+		"j" => Some(Key::J),
+		"k" => Some(Key::K),
+		"l" => Some(Key::L),
+		"semicolon" => Some(Key::SemiColon),
+		"apostrophe" => Some(Key::Apostrophe),
+		"grave" => Some(Key::Grave),
+		"left_shift" => Some(Key::LeftShift),
+		"backslash" => Some(Key::BackSlash),
+		"z" => Some(Key::Z),
+		"x" => Some(Key::X),
+		"c" => Some(Key::C),
+		"v" => Some(Key::V),
+		"b" => Some(Key::B),
+		"n" => Some(Key::N),
+		"m" => Some(Key::M),
+		"comma" => Some(Key::Comma),
+		"dot" => Some(Key::Dot),
+		"slash" => Some(Key::Slash),
+		"right_shift" => Some(Key::RightShift),
+		"left_alt" => Some(Key::LeftAlt),
+		"space" => Some(Key::Space),
+		"caps_lock" => Some(Key::CapsLock),
+		"f1" => Some(Key::F1),
+		"f2" => Some(Key::F2),
+		"f3" => Some(Key::F3),
+		"f4" => Some(Key::F4),
+		"f5" => Some(Key::F5),
+		"f6" => Some(Key::F6),
+		"f7" => Some(Key::F7),
+		"f8" => Some(Key::F8),
+		"f9" => Some(Key::F9),
+		"f10" => Some(Key::F10),
+		"f11" => Some(Key::F11),
+		"f12" => Some(Key::F12),
+		"num_lock" => Some(Key::NumLock),
+		"scroll_lock" => Some(Key::ScrollLock),
+		"right_control" => Some(Key::RightControl),
+		"sysrq" => Some(Key::SysRq),
+		"right_alt" => Some(Key::RightAlt),
+		"home" => Some(Key::Home),
+		"up" => Some(Key::Up),
+		"page_up" => Some(Key::PageUp),
+		"left" => Some(Key::Left),
+		"right" => Some(Key::Right),
+		"end" => Some(Key::End),
+		"down" => Some(Key::Down),
+		"page_down" => Some(Key::PageDown),
+		"insert" => Some(Key::Insert),
+		"delete" => Some(Key::Delete),
+		"left_meta" => Some(Key::LeftMeta),
+		"right_meta" => Some(Key::RightMeta),
+		_ => None,
+	}
 }
 
 pub struct VirtualKeyboard {
 	device: uinput::Device,
-	key_map: HashMap<&'static str, Key>,
 }
 
 impl VirtualKeyboard {
@@ -123,29 +120,20 @@ impl VirtualKeyboard {
 
 		let device = builder.create().map_err(|e| format!("create device: {}", e))?;
 
-		Ok(Self {
-			device,
-			key_map: build_key_map(),
-		})
+		Ok(Self { device })
 	}
 
 	pub fn press(&mut self, key_name: &str) -> Result<(), String> {
-		let key = self
-			.key_map
-			.get(key_name.to_lowercase().as_str())
-			.ok_or_else(|| format!("unknown key: {}", key_name))?;
+		let key = key_from_name(key_name).ok_or_else(|| format!("unknown key: {}", key_name))?;
 		self.device
-			.press(key)
+			.press(&key)
 			.map_err(|e| format!("press key: {}", e))
 	}
 
 	pub fn release(&mut self, key_name: &str) -> Result<(), String> {
-		let key = self
-			.key_map
-			.get(key_name.to_lowercase().as_str())
-			.ok_or_else(|| format!("unknown key: {}", key_name))?;
+		let key = key_from_name(key_name).ok_or_else(|| format!("unknown key: {}", key_name))?;
 		self.device
-			.release(key)
+			.release(&key)
 			.map_err(|e| format!("release key: {}", e))
 	}
 

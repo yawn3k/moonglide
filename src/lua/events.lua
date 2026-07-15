@@ -1,24 +1,8 @@
 -- event handlers called from Rust
 -- defines on_btn_down, on_btn_up, on_update
 
-function on_btn_down(btn)
-	press_times[btn] = _now()
-
-	-- reset hold timer for this press (bind.hold creates it once during config,
-	-- but on_btn_up clears it; we need to re-create it each press)
-	local e = button_bindings[btn]
-	if e and e.hold then
-		hold_timers[btn] = { fired = false, delay = e.hold_delay or (hold_press_time or 400) }
-	end
-
-	-- chord check
-	local all_held = _held_buttons()
-	for _, h in ipairs(all_held) do
-		if h == btn then goto found end
-	end
-	table.insert(all_held, btn)
-	::found::
-
+-- ── chord check ──
+local function check_chord(btn, all_held)
 	for _, chord in ipairs(chords) do
 		local is_in_chord = false
 		for _, b in ipairs(chord.buttons) do
@@ -40,12 +24,15 @@ function on_btn_down(btn)
 			for _, b in ipairs(chord.buttons) do
 				consumed[b] = true
 			end
-			return
+			return true
 		end
 		::continue::
 	end
+	return false
+end
 
-	-- double-press check
+-- ── double-press check ──
+local function check_double_press(btn)
 	local lt = last_press[btn]
 	last_press[btn] = _now()
 	if lt then
@@ -54,12 +41,15 @@ function on_btn_down(btn)
 				_current_btn = btn
 				dp.func()
 				consumed[btn] = true
-				return
+				return true
 			end
 		end
 	end
+	return false
+end
 
-	-- modeshift check
+-- ── modeshift check ──
+local function check_modeshift(btn)
 	for _, ms in ipairs(modeshifts) do
 		if ms.button == btn then
 			local all_mods = true
@@ -73,19 +63,24 @@ function on_btn_down(btn)
 				for _, m in ipairs(ms.modifiers) do
 					consumed[m] = true
 				end
-				return
+				return true
 			end
 		end
 	end
+	return false
+end
 
-	-- normal press
+-- ── normal press ──
+local function handle_normal_press(btn)
 	local e = button_bindings[btn]
 	if e and e.press then
 		_current_btn = btn
 		e.press()
 	end
+end
 
-	-- retroactive modeshift: this btn might be a mod for a held button
+-- ── retroactive modeshift ──
+local function check_retroactive_modeshift(btn)
 	for held_btn, _ in pairs(press_times) do
 		if held_btn ~= btn and _is_held(held_btn) then
 			for _, ms in ipairs(modeshifts) do
@@ -112,24 +107,56 @@ function on_btn_down(btn)
 	end
 end
 
-local function release_consumed_keys(btn)
-	consumed[btn] = nil
+-- ── release keys for a button (shared by consumed + normal paths) ──
+local function release_keys_for_button(btn, clear_held)
 	local map = held_mapping[btn]
-	if map then
-		for k, _ in pairs(map) do
-			local still = false
-			for ob, om in pairs(held_mapping) do
-				if ob ~= btn and _is_held(ob) and om[k] then still = true; break end
-			end
-			if not still then
-				_release_key(k)
-			end
+	if not map then return end
+	for k, _ in pairs(map) do
+		local still = false
+		for ob, om in pairs(held_mapping) do
+			if ob ~= btn and _is_held(ob) and om[k] then still = true; break end
 		end
+		if not still then
+			_release_key(k)
+		end
+	end
+	if clear_held then
 		held_mapping[btn] = nil
 	end
+end
+
+-- ── consumed key release ──
+local function release_consumed_keys(btn)
+	consumed[btn] = nil
+	release_keys_for_button(btn, true)
 	hold_timers[btn] = nil
 end
 
+-- ── on_btn_down ──
+function on_btn_down(btn)
+	press_times[btn] = _now()
+
+	-- reset hold timer for this press
+	local e = button_bindings[btn]
+	if e and e.hold then
+		hold_timers[btn] = { fired = false, delay = e.hold_delay or (hold_press_time or 400) }
+	end
+
+	local all_held = _held_buttons()
+	for _, h in ipairs(all_held) do
+		if h == btn then goto found end
+	end
+	table.insert(all_held, btn)
+	::found::
+
+	if check_chord(btn, all_held) then return end
+	if check_double_press(btn) then return end
+	if check_modeshift(btn) then return end
+	handle_normal_press(btn)
+	check_retroactive_modeshift(btn)
+end
+
+-- ── on_btn_up ──
 function on_btn_up(btn)
 	_current_btn = btn
 
@@ -167,32 +194,13 @@ function on_btn_up(btn)
 		e.release()
 	end
 
-	-- release mapped keys
-	local map = held_mapping[btn]
-	if map then
-		for k, _ in pairs(map) do
-			local still = false
-			for ob, om in pairs(held_mapping) do
-				if ob ~= btn and _is_held(ob) and om[k] then still = true; break end
-			end
-			if not still then
-				_release_key(k)
-			end
-		end
-		held_mapping[btn] = nil
-	end
-
+	release_keys_for_button(btn, true)
 	hold_timers[btn] = nil
 	press_times[btn] = nil
 end
 
+-- ── on_update ──
 function on_update()
-	-- gyro hold check
-	if gyro_state.hold_button and not _is_held(gyro_state.hold_button) then
-		gyro_state.active = false
-		gyro_state.hold_button = nil
-	end
-
 	-- clear frame-scoped keys from previous frame
 	for k, _ in pairs(frame_keys) do
 		_release_key(k)
@@ -236,10 +244,34 @@ function on_update()
 		_current_btn = ""
 	end
 
-	-- clean up orphaned consumed buttons (coroutine finished after button released)
+	-- clean up orphaned consumed buttons
 	for btn, _ in pairs(consumed) do
 		if not _is_held(btn) then
 			release_consumed_keys(btn)
 		end
 	end
+end
+
+-- called from Rust on reset()/reload()
+function _reset_internals()
+	log_level = 0
+	instant_press_time = 40
+	hold_press_time = 400
+	double_press_window = 200
+	trigger_threshold = 3000
+	left_stick_inner_deadzone = 0.15
+	left_stick_outer_deadzone = 1.0
+	right_stick_inner_deadzone = 0.15
+	right_stick_outer_deadzone = 1.0
+	left_ring_position = 0.8
+	right_ring_position = 0.8
+	update = nil
+	_toggled = {}
+	gyro_reset()
+	for _, name in ipairs({"_gyro_raw", "_accel_raw", "_gravity"}) do
+		local t = _G[name]
+		if t then t.x, t.y, t.z = 0, 0, 0 end
+	end
+	local o = _orientation
+	if o then o.w, o.x, o.y, o.z = 1, 0, 0, 0 end
 end

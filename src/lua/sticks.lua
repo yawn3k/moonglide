@@ -113,3 +113,9 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 
 	return { pressed = pressed, released = released }
 end
+
+function cleanup_controller(which)
+	stick_state[which] = nil
+	trigger_state[which] = nil
+	trigger_last_time[which] = nil
+end

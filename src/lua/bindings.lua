@@ -21,23 +21,18 @@ local function ref_val(v)
 	return v
 end
 
-local function extract_action(action)
+local function wrap_action(action, mode)
 	if action == nil then error("bind.*: action is nil", 2) end
-	if type(action) == "function" then
-		return action
-	end
+	if type(action) == "function" then return action end
 	local v = ref_val(action)
+	if mode == "instant" then
+		return function() instant(v) end
+	end
 	return function() press(v) end
 end
 
-local function extract_instant_action(action)
-	if action == nil then error("bind.*: action is nil", 2) end
-	if type(action) == "function" then
-		return action
-	end
-	local v = ref_val(action)
-	return function() instant(v) end
-end
+local function extract_action(action) return wrap_action(action, "press") end
+local function extract_instant_action(action) return wrap_action(action, "instant") end
 
 -- ── bind.* registration ──
 

@@ -3,6 +3,12 @@
 
 local RAD_TO_DEG = 180 / math.pi
 
+-- fusion constants
+local HALF_TIME = 0.25
+local STILL_THRESH = 0.01
+local SHAKY_THRESH = 0.4
+local WORLD_SIDE_REDUCTION = 0.125
+
 -- quaternion math (internal, no table allocs)
 local function qmul(w1, x1, y1, z1, w2, x2, y2, z2)
 	return w1*w2 - x1*x2 - y1*y2 - z1*z2,
@@ -166,83 +172,68 @@ function gyro_calibrate_stop()
 	_info(string.format("gyro calibration complete (%d samples)", n))
 end
 
--- JSM-style complementary filter: maintain gravity + orientation from gyro + accel
-local function update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
-	local q = gyro_state.quat
-	local gv = gyro_state.grav
+-- ── fusion helpers ──
 
+local function apply_gyro_rotation(cgx, cgy, cgz, dt)
+	local q = gyro_state.quat
 	local angle_speed = vlen(cgx, cgy, cgz) * math.pi / 180
 	local angle = angle_speed * dt
-
 	local rot_w, rot_x, rot_y, rot_z
-	local ri_w, ri_x, ri_y, ri_z
-
 	if angle > 0 then
 		local rx, ry, rz = cgx / angle_speed, cgy / angle_speed, cgz / angle_speed
 		rot_w, rot_x, rot_y, rot_z = qaxis_angle(angle, rx, ry, rz)
-		ri_w, ri_x, ri_y, ri_z = rot_w, -rot_x, -rot_y, -rot_z
 		q.w, q.x, q.y, q.z = qmul(q.w, q.x, q.y, q.z, rot_w, rot_x, rot_y, rot_z)
 	else
 		rot_w, rot_x, rot_y, rot_z = 1, 0, 0, 0
-		ri_w, ri_x, ri_y, ri_z = 1, 0, 0, 0
 	end
+	return angle_speed, rot_w, rot_x, rot_y, rot_z
+end
 
-	local accel_mag = vlen(ax, ay, az)
-	if accel_mag > 0 then
-		local anx, any, anz = vnorm(ax, ay, az)
+local function smooth_accel_and_shakiness(ax, ay, az, ri_w, ri_x, ri_y, ri_z, dt)
+	local sax, say, saz = qrot_vec(gyro_state.smooth_accel.x, gyro_state.smooth_accel.y, gyro_state.smooth_accel.z, ri_w, ri_x, ri_y, ri_z)
+	local sf = HALF_TIME > 0 and 2^(-dt / HALF_TIME) or 0
+	gyro_state.shakiness = gyro_state.shakiness * sf
+	gyro_state.shakiness = math.max(gyro_state.shakiness, vlen(ax - sax, ay - say, az - saz))
+	gyro_state.smooth_accel.x = sax + (ax - sax) * (1 - sf)
+	gyro_state.smooth_accel.y = say + (ay - say) * (1 - sf)
+	gyro_state.smooth_accel.z = saz + (az - saz) * (1 - sf)
+end
 
-		-- rotate smooth_accel by inverse rotation (keep in controller frame)
-		local sax, say, saz = qrot_vec(gyro_state.smooth_accel.x, gyro_state.smooth_accel.y, gyro_state.smooth_accel.z, ri_w, ri_x, ri_y, ri_z)
-
-		-- exponential smoothing of accel, track shakiness
-		local half_time = 0.25
-		local sf = half_time > 0 and 2^(-dt / half_time) or 0
-		gyro_state.shakiness = gyro_state.shakiness * sf
-		gyro_state.shakiness = math.max(gyro_state.shakiness, vlen(ax - sax, ay - say, az - saz))
-		gyro_state.smooth_accel.x, gyro_state.smooth_accel.y, gyro_state.smooth_accel.z = sax + (ax - sax) * (1 - sf), say + (ay - say) * (1 - sf), saz + (az - saz) * (1 - sf)
-
-		-- rotate gravity by inverse gyro rotation
-		gv.x, gv.y, gv.z = qrot_vec(gv.x, gv.y, gv.z, ri_w, ri_x, ri_y, ri_z)
-
-		-- correct gravity toward accelerometer direction
-		local target_x, target_y, target_z = -anx * accel_mag, -any * accel_mag, -anz * accel_mag
-		local gta_x, gta_y, gta_z = target_x - gv.x, target_y - gv.y, target_z - gv.z
-		local gta_len = vlen(gta_x, gta_y, gta_z)
-		if gta_len > 0 then
-			local gdx, gdy, gdz = gta_x / gta_len, gta_y / gta_len, gta_z / gta_len
-
-			-- correction speed: high when still, low when shaking
-			local still_thresh = 0.01
-			local shaky_thresh = 0.4
-			local corr_speed
-			if gyro_state.shakiness < still_thresh then
-				corr_speed = 1.0
-			elseif gyro_state.shakiness > shaky_thresh then
-				corr_speed = 0.1
-			else
-				local t = (gyro_state.shakiness - still_thresh) / (shaky_thresh - still_thresh)
-				corr_speed = 1.0 + (0.1 - 1.0) * t
-			end
-
-			-- clamp by gyro rate so we don't correct faster than we rotate
-			corr_speed = math.min(corr_speed, math.max(angle_speed * 0.1, 0.01))
-
-			local delta = corr_speed * dt
-			if delta < gta_len then
-				gv.x = gv.x + gdx * delta
-				gv.y = gv.y + gdy * delta
-				gv.z = gv.z + gdz * delta
-			else
-				gv.x, gv.y, gv.z = target_x, target_y, target_z
-			end
+local function correct_gravity(ax, ay, az, anx, any, anz, accel_mag, ri_w, ri_x, ri_y, ri_z, angle_speed, dt)
+	local gv = gyro_state.grav
+	gv.x, gv.y, gv.z = qrot_vec(gv.x, gv.y, gv.z, ri_w, ri_x, ri_y, ri_z)
+	local target_x, target_y, target_z = -anx * accel_mag, -any * accel_mag, -anz * accel_mag
+	local gta_x, gta_y, gta_z = target_x - gv.x, target_y - gv.y, target_z - gv.z
+	local gta_len = vlen(gta_x, gta_y, gta_z)
+	if gta_len > 0 then
+		local gdx, gdy, gdz = gta_x / gta_len, gta_y / gta_len, gta_z / gta_len
+		local corr_speed
+		if gyro_state.shakiness < STILL_THRESH then
+			corr_speed = 1.0
+		elseif gyro_state.shakiness > SHAKY_THRESH then
+			corr_speed = 0.1
+		else
+			local t = (gyro_state.shakiness - STILL_THRESH) / (SHAKY_THRESH - STILL_THRESH)
+			corr_speed = 1.0 + (0.1 - 1.0) * t
 		end
-
-		-- correct quaternion tilt using gravity direction
-		local gw, gqx, gqy, gqz
-		do
-			local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
-			gw, gqx, gqy, gqz = q.w/len, q.x/len, q.y/len, q.z/len
+		corr_speed = math.min(corr_speed, math.max(angle_speed * 0.1, 0.01))
+		local delta = corr_speed * dt
+		if delta < gta_len then
+			gv.x = gv.x + gdx * delta
+			gv.y = gv.y + gdy * delta
+			gv.z = gv.z + gdz * delta
+		else
+			gv.x, gv.y, gv.z = target_x, target_y, target_z
 		end
+	end
+end
+
+local function correct_quaternion_tilt()
+	local q = gyro_state.quat
+	local gv = gyro_state.grav
+	do
+		local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
+		local gw, gqx, gqy, gqz = q.w/len, q.x/len, q.y/len, q.z/len
 		local gdir_x, gdir_y, gdir_z = qrot_vec(gv.x, gv.y, gv.z, gw, gqx, gqy, gqz)
 		local _, gux, guy, guz = vnorm(gdir_x, gdir_y, gdir_z)
 		local err_angle = math.acos(math.max(-1, math.min(1, vdot(0, -1, 0, gux, guy, guz))))
@@ -252,16 +243,74 @@ local function update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
 			local fix_w, fix_x, fix_y, fix_z = qaxis_angle(err_angle, flat_x / flat_len, flat_y / flat_len, flat_z / flat_len)
 			q.w, q.x, q.y, q.z = qmul(fix_w, fix_x, fix_y, fix_z, q.w, q.x, q.y, q.z)
 		end
-	else
-		-- no accel data (freefall): just rotate gravity by gyro
-		gv.x, gv.y, gv.z = qrot_vec(gv.x, gv.y, gv.z, ri_w, ri_x, ri_y, ri_z)
 	end
-
-	-- normalize quaternion
 	do
 		local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
 		q.w, q.x, q.y, q.z = q.w/len, q.x/len, q.y/len, q.z/len
 	end
+end
+
+-- ── space transforms ──
+
+local function space_local_yaw(cgx, cgy, cgz)
+	return -cgy * RAD_TO_DEG, -cgx * RAD_TO_DEG
+end
+
+local function space_local_roll(cgx, cgy, cgz)
+	return -cgz * RAD_TO_DEG, -cgx * RAD_TO_DEG
+end
+
+local function space_player(cgx, cgy, cgz, gv)
+	local world_yaw = -(gv.y * cgy + gv.z * cgz)
+	local sign = world_yaw < 0 and -1 or 1
+	local yaw_rate = sign * math.min(math.abs(world_yaw) * 1.41, math.sqrt(cgy * cgy + cgz * cgz))
+	return -yaw_rate * RAD_TO_DEG, -cgx * RAD_TO_DEG
+end
+
+local function space_world(cgx, cgy, cgz, gv)
+	local deg_x_s = -(gv.x * cgx + gv.y * cgy + gv.z * cgz) * RAD_TO_DEG
+	local gdpx = gv.x
+	local pax, pay, paz = 1 - gv.x * gdpx, -gv.y * gdpx, -gv.z * gdpx
+	local pa_len2 = pax * pax + pay * pay + paz * paz
+	local deg_y_s = 0
+	if pa_len2 > 0 then
+		local pa_len = math.sqrt(pa_len2)
+		pax, pay, paz = pax / pa_len, pay / pa_len, paz / pa_len
+		local side_max = math.max(math.abs(gv.y), math.abs(gv.z))
+		local side_reduction = side_max <= WORLD_SIDE_REDUCTION and 0 or math.min((side_max - WORLD_SIDE_REDUCTION) / WORLD_SIDE_REDUCTION, 1)
+		deg_y_s = -side_reduction * (pax * cgx + pay * cgy + paz * cgz) * RAD_TO_DEG
+	end
+	return deg_x_s, deg_y_s
+end
+
+local space_handlers = {
+	player = space_player,
+	world = space_world,
+	local_yaw = space_local_yaw,
+	local_roll = space_local_roll,
+}
+
+-- JSM-style complementary filter: maintain gravity + orientation from gyro + accel
+local function update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
+	local angle_speed, rot_w, rot_x, rot_y, rot_z = apply_gyro_rotation(cgx, cgy, cgz, dt)
+	local ri_w, ri_x, ri_y, ri_z = rot_w, -rot_x, -rot_y, -rot_z
+
+	local accel_mag = vlen(ax, ay, az)
+	if accel_mag > 0 then
+		local anx, any, anz = vnorm(ax, ay, az)
+
+		smooth_accel_and_shakiness(ax, ay, az, ri_w, ri_x, ri_y, ri_z, dt)
+		correct_gravity(ax, ay, az, anx, any, anz, accel_mag, ri_w, ri_x, ri_y, ri_z, angle_speed, dt)
+		correct_quaternion_tilt()
+	else
+		local gv = gyro_state.grav
+		gv.x, gv.y, gv.z = qrot_vec(gv.x, gv.y, gv.z, ri_w, ri_x, ri_y, ri_z)
+	end
+
+	-- normalize quaternion every frame to prevent drift
+	local q = gyro_state.quat
+	local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
+	q.w, q.x, q.y, q.z = q.w/len, q.x/len, q.y/len, q.z/len
 end
 
 -- called by Rust on every sensor event (gyro AND accel)
@@ -302,6 +351,12 @@ end
 
 -- called by Rust once per frame
 function process_gyro(gx, gy, gz, dt)
+	-- gyro hold check (was in on_update; moved here to keep gyro concerns together)
+	if gyro_state.hold_button and not _is_held(gyro_state.hold_button) then
+		gyro_state.active = false
+		gyro_state.hold_button = nil
+	end
+
 	if gyro_state.calibrating then return {} end
 	if not gyro_state.active then return {} end
 
@@ -309,38 +364,8 @@ function process_gyro(gx, gy, gz, dt)
 	local gv = _gravity
 
 	local deg_x_s, deg_y_s
-
-	if gyro_state.space == "player" then
-		-- JSM CalculatePlayerSpaceGyro
-		local world_yaw = -(gv.y * cgy + gv.z * cgz)
-		local sign = world_yaw < 0 and -1 or 1
-		local yaw_rate = sign * math.min(math.abs(world_yaw) * 1.41, math.sqrt(cgy * cgy + cgz * cgz))
-		deg_x_s = -yaw_rate * RAD_TO_DEG
-		deg_y_s = -cgx * RAD_TO_DEG
-	elseif gyro_state.space == "world" then
-		-- JSM CalculateWorldSpaceGyro
-		deg_x_s = -(gv.x * cgx + gv.y * cgy + gv.z * cgz) * RAD_TO_DEG
-		local gdpx = gv.x
-		local pax, pay, paz = 1 - gv.x * gdpx, -gv.y * gdpx, -gv.z * gdpx
-		local pa_len2 = pax * pax + pay * pay + paz * paz
-		if pa_len2 > 0 then
-			local pa_len = math.sqrt(pa_len2)
-			pax, pay, paz = pax / pa_len, pay / pa_len, paz / pa_len
-			local side_max = math.max(math.abs(gv.y), math.abs(gv.z))
-			local sr = 0.125
-			local side_reduction = side_max <= sr and 0 or math.min((side_max - sr) / sr, 1)
-			deg_y_s = -side_reduction * (pax * cgx + pay * cgy + paz * cgz) * RAD_TO_DEG
-		else
-			deg_y_s = 0
-		end
-	elseif gyro_state.space == "local_yaw" then
-		deg_x_s = -cgy * RAD_TO_DEG
-		deg_y_s = -cgx * RAD_TO_DEG
-	else
-		-- local_roll
-		deg_x_s = -cgz * RAD_TO_DEG
-		deg_y_s = -cgx * RAD_TO_DEG
-	end
+	local space_fn = space_handlers[gyro_state.space] or space_local_yaw
+	deg_x_s, deg_y_s = space_fn(cgx, cgy, cgz, gv)
 
 	local dz = gyro_state.deadzone
 	if dz and dz > 0 then

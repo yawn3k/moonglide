@@ -10,8 +10,7 @@ mod frame_pacer;
 mod style;
 
 use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use mlua::Lua;
@@ -26,7 +25,6 @@ use output::keyboard::VirtualKeyboard;
 use output::mouse::VirtualMouse;
 use output_devices::OutputDevices;
 
-
 pub(crate) static LOG_LEVEL: AtomicU8 = AtomicU8::new(0);
 pub(crate) fn log_msg(level: u8, msg: &str) {
 	if LOG_LEVEL.load(Ordering::Relaxed) >= level {
@@ -39,11 +37,10 @@ struct OutputState {
 	mapper: Arc<Mutex<Mapper>>,
 	axis_state: HashMap<u32, [i16; 6]>,
 	prev_buttons: HashMap<u32, u32>,
-	gyro_accum: (f64, f64),
 	last_frame_time: Option<Instant>,
 }
 
-fn main() {
+fn parse_args() -> Option<String> {
 	let args: Vec<String> = std::env::args().collect();
 	if args.len() >= 2 {
 		match args[1].as_str() {
@@ -66,42 +63,43 @@ fn main() {
 				eprintln!("       moonglide --gen-meta [path]");
 				std::process::exit(1);
 			}
-			_ => {}
+			_ => return Some(args[1].clone()),
 		}
 	}
+	None
+}
 
-	let sdl = match sdl2::init() {
-		Ok(s) => s,
-		Err(e) => { eprintln!("{}", style::err(&format!("error: sdl init failed: {}", e))); return; }
-	};
+fn init_sdl() -> (sdl2::Sdl, sdl2::EventPump, sdl2::GameControllerSubsystem) {
+	let sdl = sdl2::init().unwrap_or_else(|e| {
+		eprintln!("{}", style::err(&format!("error: sdl init failed: {}", e)));
+		std::process::exit(1);
+	});
+	let event_pump = sdl.event_pump().unwrap_or_else(|e| {
+		eprintln!("{}", style::err(&format!("error: event pump: {}", e)));
+		std::process::exit(1);
+	});
+	let game_controller_subsys = sdl.game_controller().unwrap_or_else(|e| {
+		eprintln!("{}", style::err(&format!("error: game controller subsystem: {}", e)));
+		std::process::exit(1);
+	});
+	(sdl, event_pump, game_controller_subsys)
+}
 
-	let mut event_pump = match sdl.event_pump() {
-		Ok(p) => p,
-		Err(e) => { eprintln!("{}", style::err(&format!("error: event pump: {}", e))); return; }
-	};
-
-	let game_controller_subsys = match sdl.game_controller() {
-		Ok(g) => g,
-		Err(e) => { eprintln!("{}", style::err(&format!("error: game controller subsystem: {}", e))); return; }
-	};
-
+fn init_lua(mapper: &Arc<Mutex<Mapper>>, config_path: Option<String>) -> Lua {
 	let lua = Lua::new();
-
-	let mapper = Arc::new(Mutex::new(Mapper::new()));
-
-	api::register_api(&lua, &mapper);
+	api::register_api(&lua, mapper);
 
 	let _ = lua.globals().set("_gyro_raw", lua.create_table().unwrap());
 	let _ = lua.globals().set("_accel_raw", lua.create_table().unwrap());
 	let _ = lua.globals().set("_gravity", lua.create_table().unwrap());
 	let _ = lua.globals().set("_orientation", lua.create_table().unwrap());
 
-	if let Err(e) = config::setup_dsl(&lua) {
+	config::setup_dsl(&lua).unwrap_or_else(|e| {
 		eprintln!("{}", style::err(&format!("setup_dsl: {}", e)));
-		return;
-	}
+		std::process::exit(1);
+	});
 
-	match std::env::args().nth(1) {
+	match config_path {
 		Some(path) => match config::load(&path, &lua) {
 			Ok(()) => println!("{}", style::info(&format!("config loaded from {}", path))),
 			Err(e) => {
@@ -113,12 +111,37 @@ fn main() {
 			println!("{}", style::warn("no config specified, running with empty config"));
 			config::init_bare(&lua);
 		}
-	};
+	}
+	lua
+}
 
-	let mut ctrl_mgr = match controller::ControllerManager::open(game_controller_subsys) {
-		Ok(m) => { println!("{}", style::info(&format!("{} controller(s) found at startup", m.controllers.len()))); m }
-		Err(e) => { eprintln!("{}", style::err(&format!("error: controller manager: {}", e))); return; }
-	};
+fn init_controllers(subsys: sdl2::GameControllerSubsystem) -> controller::ControllerManager {
+	controller::ControllerManager::open(subsys).unwrap_or_else(|e| {
+		eprintln!("{}", style::err(&format!("error: controller manager: {}", e)));
+		std::process::exit(1);
+	})
+}
+
+fn handle_btn_down(name: &str, state: &mut OutputState, lua: &Lua, pending: &mut Vec<PendingThread>) {
+	state.mapper.lock().unwrap().button_down(name);
+	call_on_btn_down(lua, name, pending);
+}
+
+fn handle_btn_up(name: &str, state: &mut OutputState, lua: &Lua, pending: &mut Vec<PendingThread>) {
+	state.mapper.lock().unwrap().button_up(name);
+	call_on_btn_up(lua, name, pending);
+}
+
+fn main() {
+	style::init();
+	let config_path = parse_args();
+	let (_sdl, mut event_pump, game_controller_subsys) = init_sdl();
+
+	let mapper = Arc::new(Mutex::new(Mapper::new()));
+	let lua = init_lua(&mapper, config_path);
+
+	let mut ctrl_mgr = init_controllers(game_controller_subsys);
+	println!("{}", style::info(&format!("{} controller(s) found at startup", ctrl_mgr.controllers.len())));
 
 	let mouse = VirtualMouse::new().ok();
 	let kbd = VirtualKeyboard::new().ok();
@@ -134,7 +157,6 @@ fn main() {
 		mapper,
 		axis_state: HashMap::new(),
 		prev_buttons: HashMap::new(),
-		gyro_accum: (0.0, 0.0),
 		last_frame_time: None,
 	};
 
@@ -144,23 +166,17 @@ fn main() {
 	let mut pending: Vec<PendingThread> = Vec::new();
 	let mut pacer = frame_pacer::FramePacer::new(1000.0);
 
-	let (repl_tx, repl_rx): (Sender<String>, Receiver<String>) = std::sync::mpsc::channel();
-	let repl_running = Arc::new(AtomicBool::new(true));
+	let (repl_tx, repl_rx) = std::sync::mpsc::channel::<String>();
 
-	{
-		let running = repl_running.clone();
-		std::thread::spawn(move || {
-			let mut line = String::new();
-			while running.load(std::sync::atomic::Ordering::Relaxed) {
-				line.clear();
-				match std::io::stdin().read_line(&mut line) {
-					Ok(0) => break,
-					Ok(_) => { let t = line.trim().to_string(); if !t.is_empty() { let _ = repl_tx.send(t); } }
-					Err(_) => break,
-				}
-			}
-		});
-	}
+	std::thread::spawn(move || {
+		let mut line = String::new();
+		while let Ok(n) = std::io::stdin().read_line(&mut line) {
+			if n == 0 { break; }
+			let t = line.trim().to_string();
+			if !t.is_empty() { let _ = repl_tx.send(t); }
+			line.clear();
+		}
+	});
 
 	'running: loop {
 		for event in event_pump.poll_iter() {
@@ -181,6 +197,7 @@ fn main() {
 					ControllerEvent::Disconnected(id) => {
 						println!("{}", style::yellow(&format!("controller disconnected (instance {})", id)));
 						let _ = lua.globals().get::<mlua::Function>("gyro_reset").map(|f| f.call::<()>(()));
+						let _ = lua.globals().get::<mlua::Function>("cleanup_controller").map(|f| f.call::<()>((id,)));
 						state.axis_state.remove(&id);
 						state.prev_buttons.remove(&id);
 					}
@@ -188,6 +205,7 @@ fn main() {
 			}
 		}
 
+		// dt capped at 100ms to prevent fusion explosion on pause/resume
 		let frame_dt = state.last_frame_time
 			.map(|t| (Instant::now() - t).as_secs_f64().min(0.1))
 			.unwrap_or(0.0);
@@ -215,8 +233,13 @@ fn main() {
 				if let Ok(result) = lua.globals().get::<mlua::Function>("process_gyro")
 					.and_then(|f| f.call::<mlua::Table>((gx as f64, gy as f64, gz as f64, frame_dt)))
 				{
-					state.gyro_accum.0 += result.get("dx").unwrap_or(0.0);
-					state.gyro_accum.1 += result.get("dy").unwrap_or(0.0);
+					let dx = result.get("dx").unwrap_or(0.0);
+					let dy = result.get("dy").unwrap_or(0.0);
+					if dx != 0.0 || dy != 0.0 {
+						if let Some(mouse) = state.dev.mouse.as_mut() {
+							let _ = mouse.move_mouse(dx, dy);
+						}
+					}
 				}
 			}
 		}
@@ -269,11 +292,6 @@ fn main() {
 
 		poll_pending_threads(&mut pending, &lua);
 
-		if (state.gyro_accum.0 != 0.0 || state.gyro_accum.1 != 0.0) && state.dev.mouse.is_some() {
-			let _ = state.dev.mouse.as_mut().unwrap().move_mouse(state.gyro_accum.0, state.gyro_accum.1);
-		}
-		state.gyro_accum = (0.0, 0.0);
-
 		for (key, press) in state.mapper.lock().unwrap().drain_actions() {
 			state.dev.apply(&key, press);
 		}
@@ -284,15 +302,4 @@ fn main() {
 	}
 
 	state.mapper.lock().unwrap().release_all();
-	repl_running.store(false, std::sync::atomic::Ordering::Relaxed);
-}
-
-fn handle_btn_down(name: &str, state: &mut OutputState, lua: &Lua, pending: &mut Vec<PendingThread>) {
-	state.mapper.lock().unwrap().button_down(name);
-	call_on_btn_down(lua, name, pending);
-}
-
-fn handle_btn_up(name: &str, state: &mut OutputState, lua: &Lua, pending: &mut Vec<PendingThread>) {
-	state.mapper.lock().unwrap().button_up(name);
-	call_on_btn_up(lua, name, pending);
 }
