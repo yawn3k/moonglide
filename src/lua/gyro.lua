@@ -52,7 +52,6 @@ local gyro_state = {
 	calibration = 45.454,
 	in_game_sens = 1,
 	accum_x = 0, accum_y = 0,
-	last_time = nil,
 	cal_samples = {},
 	calibrating = false,
 	hold_button = nil,
@@ -112,7 +111,6 @@ end
 function gyro_enable()
 	gyro_state.hold_button = nil
 	gyro_state.active = true
-	gyro_state.last_time = _now()
 end
 
 function gyro_disable()
@@ -129,7 +127,6 @@ end
 function gyro_hold()
 	gyro_state.hold_button = _current_btn
 	gyro_state.active = true
-	gyro_state.last_time = _now()
 end
 
 function gyro_calibrate_start()
@@ -293,14 +290,10 @@ function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)
 	_orientation.x, _orientation.y, _orientation.z, _orientation.w = gyro_state.quat.x, gyro_state.quat.y, gyro_state.quat.z, gyro_state.quat.w
 end
 
--- called by Rust on gyro events only
-function process_gyro(gx, gy, gz)
+-- called by Rust once per frame
+function process_gyro(gx, gy, gz, dt)
 	if gyro_state.calibrating then return {} end
 	if not gyro_state.active then return {} end
-
-	local now = _now()
-	local dt = gyro_state.last_time and math.min(now - gyro_state.last_time, 0.1) or 0
-	gyro_state.last_time = now
 
 	local cgx, cgy, cgz = gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz
 	local gv = _gravity

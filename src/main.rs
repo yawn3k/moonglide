@@ -13,11 +13,13 @@ use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use mlua::Lua;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-use controller::{idx_to_button_name, ControllerEvent};
+use controller::idx_to_button_name;
+use controller::ControllerEvent;
 use lua_coroutines::{call_on_btn_down, call_on_btn_up, poll_pending_threads, resume_thread, PendingThread};
 use mapping::Mapper;
 use output::keyboard::VirtualKeyboard;
@@ -36,9 +38,9 @@ struct OutputState {
 	dev: OutputDevices,
 	mapper: Arc<Mutex<Mapper>>,
 	axis_state: HashMap<u32, [i16; 6]>,
-	latest_gyro: (f64, f64, f64),
-	latest_accel: (f64, f64, f64),
-	last_sensor_time: Option<f64>,
+	prev_buttons: HashMap<u32, u32>,
+	gyro_accum: (f64, f64),
+	last_frame_time: Option<Instant>,
 }
 
 fn main() {
@@ -131,9 +133,9 @@ fn main() {
 		dev: OutputDevices { mouse, kbd },
 		mapper,
 		axis_state: HashMap::new(),
-		latest_gyro: (0.0, 0.0, 0.0),
-		latest_accel: (0.0, 0.0, 0.0),
-		last_sensor_time: None,
+		prev_buttons: HashMap::new(),
+		gyro_accum: (0.0, 0.0),
+		last_frame_time: None,
 	};
 
 	println!("{}", style::bold("Moonglide running. Press Escape to quit."));
@@ -169,73 +171,52 @@ fn main() {
 
 			for ce in ctrl_mgr.handle_event(&event) {
 				match ce {
-					ControllerEvent::AxisMotion(idx, val, which) => {
-						let axes = state.axis_state.entry(which).or_insert([0i16; 6]);
-						if idx >= 101 && idx <= 106 {
-							axes[(idx - 101) as usize] = val;
-						}
-					}
-					ControllerEvent::ButtonDown(btn_idx) => {
-						handle_btn_down(&idx_to_button_name(btn_idx), &mut state, &lua, &mut pending);
-					}
-					ControllerEvent::ButtonUp(btn_idx) => {
-						handle_btn_up(&idx_to_button_name(btn_idx), &mut state, &lua, &mut pending);
-					}
 					ControllerEvent::TouchpadTouch => {
 						handle_btn_down("touchpad_touch", &mut state, &lua, &mut pending);
 					}
 					ControllerEvent::TouchpadUntouch => {
 						handle_btn_up("touchpad_touch", &mut state, &lua, &mut pending);
 					}
-					ControllerEvent::Gyro { x, y, z } => {
-						state.latest_gyro = (x as f64, y as f64, z as f64);
-
-						let now = std::time::SystemTime::now()
-							.duration_since(std::time::UNIX_EPOCH)
-							.unwrap_or_default()
-							.as_secs_f64();
-						let dt = state.last_sensor_time.map(|t| (now - t).min(0.1)).unwrap_or(0.0);
-						state.last_sensor_time = Some(now);
-
-						let (ax, ay, az) = state.latest_accel;
-						if let Ok(f) = lua.globals().get::<mlua::Function>("on_sensor_event") {
-							let _ = f.call::<()>((x as f64, y as f64, z as f64, ax, ay, az, dt, true));
-						}
-
-						if let Ok(f) = lua.globals().get::<mlua::Function>("process_gyro") {
-							match f.call::<mlua::Table>((x as f64, y as f64, z as f64)) {
-								Ok(result) => {
-									let dx: f64 = result.get("dx").unwrap_or(0.0);
-									let dy: f64 = result.get("dy").unwrap_or(0.0);
-									if (dx != 0.0 || dy != 0.0) && state.dev.mouse.is_some() {
-										let _ = state.dev.mouse.as_mut().unwrap().move_mouse(dx, dy);
-									}
-								}
-								Err(e) => log_msg(2, &format!("process_gyro: {}", e)),
-							}
-						}
-					}
-					ControllerEvent::Accelerometer { x, y, z } => {
-						state.latest_accel = (x as f64, y as f64, z as f64);
-
-						let now = std::time::SystemTime::now()
-							.duration_since(std::time::UNIX_EPOCH)
-							.unwrap_or_default()
-							.as_secs_f64();
-						let dt = state.last_sensor_time.map(|t| (now - t).min(0.1)).unwrap_or(0.0);
-						state.last_sensor_time = Some(now);
-
-						let (gx, gy, gz) = state.latest_gyro;
-						if let Ok(f) = lua.globals().get::<mlua::Function>("on_sensor_event") {
-							let _ = f.call::<()>((gx, gy, gz, x as f64, y as f64, z as f64, dt, false));
-						}
-					}
 					ControllerEvent::Connected(id) => println!("{}", style::green(&format!("controller connected (instance {})", id))),
 					ControllerEvent::Disconnected(id) => {
 						println!("{}", style::yellow(&format!("controller disconnected (instance {})", id)));
 						let _ = lua.globals().get::<mlua::Function>("gyro_reset").map(|f| f.call::<()>(()));
 						state.axis_state.remove(&id);
+						state.prev_buttons.remove(&id);
 					}
+				}
+			}
+		}
+
+		let frame_dt = state.last_frame_time
+			.map(|t| (Instant::now() - t).as_secs_f64().min(0.1))
+			.unwrap_or(0.0);
+		state.last_frame_time = Some(Instant::now());
+
+		for id in ctrl_mgr.connected_ids() {
+			for (btn_idx, pressed) in ctrl_mgr.poll_buttons(id, state.prev_buttons.entry(id).or_insert(0)) {
+				let name = idx_to_button_name(btn_idx);
+				if pressed {
+					handle_btn_down(&name, &mut state, &lua, &mut pending);
+				} else {
+					handle_btn_up(&name, &mut state, &lua, &mut pending);
+				}
+			}
+
+			if let Some(axes) = ctrl_mgr.poll_axes(id) {
+				state.axis_state.insert(id, axes);
+			}
+
+			if let Some((gx, gy, gz, ax, ay, az)) = ctrl_mgr.poll_sensors(id) {
+				if let Ok(f) = lua.globals().get::<mlua::Function>("on_sensor_event") {
+					let _ = f.call::<()>((gx as f64, gy as f64, gz as f64, ax as f64, ay as f64, az as f64, frame_dt, true));
+				}
+
+				if let Ok(result) = lua.globals().get::<mlua::Function>("process_gyro")
+					.and_then(|f| f.call::<mlua::Table>((gx as f64, gy as f64, gz as f64, frame_dt)))
+				{
+					state.gyro_accum.0 += result.get("dx").unwrap_or(0.0);
+					state.gyro_accum.1 += result.get("dy").unwrap_or(0.0);
 				}
 			}
 		}
@@ -287,6 +268,11 @@ fn main() {
 		}
 
 		poll_pending_threads(&mut pending, &lua);
+
+		if (state.gyro_accum.0 != 0.0 || state.gyro_accum.1 != 0.0) && state.dev.mouse.is_some() {
+			let _ = state.dev.mouse.as_mut().unwrap().move_mouse(state.gyro_accum.0, state.gyro_accum.1);
+		}
+		state.gyro_accum = (0.0, 0.0);
 
 		for (key, press) in state.mapper.lock().unwrap().drain_actions() {
 			state.dev.apply(&key, press);
