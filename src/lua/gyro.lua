@@ -364,8 +364,8 @@ function process_gyro(gx, gy, gz, dt)
 	gyro_state.accum_x = gyro_state.accum_x + dx
 	gyro_state.accum_y = gyro_state.accum_y + dy
 
-	local out_x = math.floor(gyro_state.accum_x)
-	local out_y = math.floor(gyro_state.accum_y)
+	local out_x = gyro_state.accum_x >= 0 and math.floor(gyro_state.accum_x) or math.ceil(gyro_state.accum_x)
+	local out_y = gyro_state.accum_y >= 0 and math.floor(gyro_state.accum_y) or math.ceil(gyro_state.accum_y)
 	if out_x ~= 0 or out_y ~= 0 then
 		gyro_state.accum_x = gyro_state.accum_x - out_x
 		gyro_state.accum_y = gyro_state.accum_y - out_y
