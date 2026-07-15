@@ -4,6 +4,13 @@
 function on_btn_down(btn)
 	press_times[btn] = _now()
 
+	-- reset hold timer for this press (bind.hold creates it once during config,
+	-- but on_btn_up clears it; we need to re-create it each press)
+	local e = button_bindings[btn]
+	if e and e.hold then
+		hold_timers[btn] = { fired = false, delay = e.hold_delay or (hold_press_time or 400) }
+	end
+
 	-- chord check
 	local all_held = _held_buttons()
 	for _, h in ipairs(all_held) do
@@ -134,7 +141,8 @@ function on_btn_up(btn)
 	-- tap check
 	local pt = press_times[btn]
 	local e = button_bindings[btn]
-	if pt and (_now() - pt) * 1000 < 180 then
+	local tap_window = (e and e.hold_delay) or 180
+	if pt and (_now() - pt) * 1000 < tap_window then
 		if e and e.tap then
 			local has_dp = false
 			for _, dp in ipairs(double_presses) do
