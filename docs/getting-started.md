@@ -93,3 +93,5 @@ the prerequisites above.
 - Virtual controller
 - REPL improvements
 - Full touchapd remapping and support
+- Flick stick
+- Compensate for windows pointer speed
