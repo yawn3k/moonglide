@@ -11,6 +11,7 @@ gyro {
     in_game_sens = 1.0,       -- match your game's sensitivity slider
     deadzone = 0,             -- deg/s threshold below which output is suppressed
     space = "local_yaw",      -- one of: local_yaw, local_roll, player, world
+    acceleration = nil,       -- function(speed_dps) → multiplier, or a curve helper
 }
 ```
 
@@ -87,6 +88,41 @@ Updated every sensor event (~2000 Hz combined gyro + accel):
 ## Sensor Event Callback
 
 `on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)` is called on every sensor event (gyro AND accel). Can be overridden for custom calibration, fusion, or logging. The default implementation handles bias, JSM-style complementary filter, gravity tracking, and orientation.
+
+## Acceleration Curves
+
+`gyro { acceleration = fn }` — a user-defined function that scales gyro output based on raw controller rotational speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
+
+```lua
+gyro { acceleration = function(speed)
+    return 1 + math.min(speed / 20, 1)     -- 1×→2× boost, plateaus at 20 dps
+end }
+```
+
+### Built-in Curves: `curve.*`
+
+| Helper | Params | Defaults | Description |
+|--------|--------|----------|-------------|
+| `curve.precision` | `threshold`, `min_factor` | 5, 0 | Smoothstep from `min_factor`→1×. Suppresses jitter at low speeds. |
+| `curve.linear` | `threshold`, `min`, `max` | 20, 1, 2 | Linear ramp from `min`→`max`. |
+
+Configure via table call (returns itself for use in `gyro {}`):
+
+```lua
+-- configure + use separately
+curve.precision { threshold = 8, min_factor = 0.15 }
+gyro { acceleration = curve.precision }
+
+-- one-shot
+gyro { acceleration = curve.linear { threshold = 30, min = 1, max = 3 } }
+
+-- compose with your own logic
+gyro { acceleration = function(s)
+    return curve.precision(s) * curve.linear(s)
+end }
+```
+
+The `acceleration` function runs after sensitivity and deadzone but before sub-pixel accumulation. `curve.precision` and `curve.linear` read their state from a shared table that persists across frames — configuration persists until changed or `reset()`.
 
 ## Deadzone
 

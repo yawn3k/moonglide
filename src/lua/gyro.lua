@@ -74,6 +74,9 @@ local gyro_state = {
 
 	-- gyro space
 	space = "local_yaw",
+
+	-- acceleration curve function (takes speed_dps, returns multiplier)
+	accel_fn = nil,
 }
 
 -- init gravity/orientation globals from module load
@@ -90,13 +93,20 @@ local function parse_sens(val)
 end
 
 function gyro(tbl)
-	local s = tbl.sensitivity or tbl.gyro_sens or 1
-	gyro_state.sens_h, gyro_state.sens_v = parse_sens(s)
+	local s = tbl.sensitivity or tbl.gyro_sens
+	if s then
+		gyro_state.sens_h, gyro_state.sens_v = parse_sens(s)
+	end
 	gyro_state.calibration = tbl.calibration or gyro_state.calibration
 	gyro_state.in_game_sens = tbl.in_game_sens or gyro_state.in_game_sens
 	gyro_state.deadzone = tbl.deadzone or gyro_state.deadzone
 	if tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world" then
 		gyro_state.space = tbl.space
+	end
+	if type(tbl.acceleration) == "function" then
+		gyro_state.accel_fn = tbl.acceleration
+	else
+		gyro_state.accel_fn = nil
 	end
 end
 
@@ -344,6 +354,13 @@ function process_gyro(gx, gy, gz, dt)
 	local dx = deg_x_s * dt * conv * gyro_state.sens_h
 	local dy = deg_y_s * dt * conv * gyro_state.sens_v
 
+	if gyro_state.accel_fn then
+		local speed_dps = vlen(gx, gy, gz) * RAD_TO_DEG
+		local factor = gyro_state.accel_fn(speed_dps)
+		dx = dx * (factor or 1)
+		dy = dy * (factor or 1)
+	end
+
 	gyro_state.accum_x = gyro_state.accum_x + dx
 	gyro_state.accum_y = gyro_state.accum_y + dy
 
@@ -378,7 +395,37 @@ function gyro_reset()
 	gyro_state.cal_gx = 0
 	gyro_state.cal_gy = 0
 	gyro_state.cal_gz = 0
+	gyro_state.accel_fn = nil
 
 	_gravity.x, _gravity.y, _gravity.z = 0, 0, 0
 	_orientation.w, _orientation.x, _orientation.y, _orientation.z = 1, 0, 0, 0
 end
+
+local function make_curve(defaults, fn)
+	local state = {}
+	for k, v in pairs(defaults) do state[k] = v end
+	local func
+	func = function(arg)
+		if type(arg) == "table" then
+			for k, v in pairs(arg) do state[k] = v end
+			return func
+		end
+		return fn(state, arg)
+	end
+	return func
+end
+
+curve = curve or {}
+setmetatable(curve, { __index = function(_, k) error("unknown curve: " .. tostring(k), 2) end })
+
+curve.precision = make_curve({ threshold = 5, min_factor = 0 }, function(s, speed)
+	if s.threshold <= 0 then return 1 end
+	local t = math.min(speed / s.threshold, 1)
+	return s.min_factor + (1 - s.min_factor) * t * t * (3 - 2 * t)
+end)
+
+curve.linear = make_curve({ threshold = 20, min = 1, max = 2 }, function(s, speed)
+	if s.threshold <= 0 then return s.max end
+	local t = math.min(speed / s.threshold, 1)
+	return s.min + (s.max - s.min) * t
+end)

@@ -151,6 +151,9 @@ mouse = {}
 ---@field gyro_sens? number|number[]
 ---@field calibration? number
 ---@field in_game_sens? number
+---@field deadzone? number
+---@field space? string
+---@field acceleration? function
 
 --- @param cfg gyro_config
 function gyro(cfg) end
@@ -222,6 +225,21 @@ _current_btn = ""
 --- @field double_press fun(button: string, action: string|fun(), opts?: double_press_opts)
 --- @field modeshift fun(modifiers: string[], button: string, action: string|fun())
 bind = {}
+
+--- Gyro acceleration curve helpers.
+---@class curve_table
+---@field precision fun(config?: curve_precision_config): fun(speed_dps: number): number
+---@field linear fun(config?: curve_linear_config): fun(speed_dps: number): number
+
+---@class curve_precision_config
+---@field threshold? number  -- dps at which factor reaches 1.0 (default 5)
+---@field min_factor? number -- multiplier at 0 dps (default 0)
+
+---@class curve_linear_config
+---@field threshold? number -- dps at which factor reaches max (default 20)
+---@field min? number       -- multiplier at 0 dps (default 1)
+---@field max? number       -- multiplier at threshold (default 2)
+curve = {}
 
 ---@type integer
 log_level = 0

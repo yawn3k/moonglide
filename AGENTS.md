@@ -97,8 +97,10 @@ Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The
 - `bind.*` DSL, user helpers (`press`, `release`, `instant`, `toggle`, `held`, `wait`) (`bindings.lua`)
 - `process_sticks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
 - `process_steicks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
-- `process_gyro()` — four gyro spaces, deadzone, calibration, enable/disable (`gyro.lua`)
+- `process_gyro()` — four gyro spaces, deadzone, calibration, enable/disable, acceleration curves (`gyro.lua`)
 - `on_sensor_event()` — fusion, gravity auto-init, bias subtraction (`gyro.lua`)
+- `make_curve()` — factory for acceleration curve helpers (`gyro.lua`)
+- `curve.precision` / `curve.linear` — built-in acceleration curves (`gyro.lua`)
 - `on_btn_down/up/update` — event dispatching (chords, modeshift, DP, hold timers) (`events.lua`)
 
 `init_bare()` sets `package.path` to `./?.lua`. `load(path)` prepends the config file's directory to `package.path`, then executes the file. No Rust-side struct conversion — all binding logic stays in Lua.
@@ -171,6 +173,10 @@ Internally:
 - **Sensor fusion**: JSM-style complementary filter — gyro rotation → quaternion → accel smoothing + shakiness → gravity correction → quaternion tilt correction
 - **on_sensor_event()** called on every gyro AND accel event (~2000 Hz combined): updates `_gravity`/`_orientation`/`_gyro_raw`/`_accel_raw` globals, handles calibration samples (gated on `is_gyro`), runs bias subtraction, drives fusion
 - **Gyro deadzone**: configurable in deg/s (`GYRO_CUTOFF_SPEED`), suppresses output below threshold on per-frame velocity (2D magnitude after space transform)
+- **Acceleration curves**: `gyro { acceleration = fn }` — user-defined function that takes raw speed (deg/s) and returns a multiplier; applied after sensitivity/deadzone, before sub-pixel accumulation
+- `curve.precision { threshold, min_factor }` — smoothstep 0→1×, configurable via table call
+- `curve.linear { threshold, min, max }` — linear ramp min→max, configurable via table call
+- Both curves share state across frames; reset via `reset()`
 - Bias subtraction: `value - bias` for X, Y, Z axes
 - Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias (now 3 axes including Z)
 - Gravity auto-initialized from first valid accelerometer reading — no hardcoded orientation guess
@@ -217,9 +223,10 @@ Config globals read by Lua each frame (no Rust atomics — just Lua globals):
 Set via the `gyro(tbl)` function in config:
 
 | Field | Default | Description |
-|---|---|---|
+|---|---|---|---|
 | `sensitivity` / `gyro_sens` | 1.0 | Multiplier (single or `{h, v}`) |
 | `calibration` | 45.454 | RWS factor (CS2 baseline) |
 | `in_game_sens` | 1.0 | Game's mouse sensitivity value |
 | `deadzone` | 0 | Gyro cutoff speed in deg/s (JSM `GYRO_CUTOFF_SPEED`) |
 | `space` | `"local_yaw"` | One of: `local_yaw`, `local_roll`, `player`, `world` |
+| `acceleration` | `nil` | Function `(speed_dps) → multiplier` or curve helper reference |
