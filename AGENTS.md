@@ -26,18 +26,20 @@ cargo test <name>             # single test by name
 
 ```
 src/
-├── main.rs            — SDL init, event loop, Lua config load, gyro/accel/sensor fusion
+├── main.rs            — SDL init, event loop, Lua config load, per-controller poll loop
 ├── config.rs          — loads Lua scripts (tables/bindings/sticks/gyro/events)
 ├── api.rs             — Lua ↔ Rust glue functions (_press_key, _is_held, log, etc.)
-├── mapping.rs         — Mapper: button state → active keyboard/mouse output
-├── controller.rs      — SDL controller open/close/sensor events → ControllerEvent
+├── mapping.rs         — Mapper: button/axis state → active keyboard/mouse output
+├── controller.rs      — SDL controller open/close, poll_buttons/poll_axes/poll_sensors
 ├── lua_coroutines.rs  — PendingThread, execute/poll Lua coroutines
-├── output_devices.rs  — OutputDevices (mouse+kbd)
+├── output_devices.rs  — OutputDevices (mouse+kbd), apply + synchronize
 ├── frame_pacer.rs     — FramePacer (drift-compensated sleep at target FPS)
 ├── style.rs           — ANSI escape helpers for console output
 ├── output/
-│   ├── mouse.rs       — uinput mouse (relative move, buttons)
-│   └── keyboard.rs    — uinput keyboard (key map, mouse button helpers)
+│   ├── mouse_linux.rs    — uinput mouse (relative move, buttons)
+│   ├── mouse_windows.rs  — SendInput mouse (relative move, buttons)
+│   ├── keyboard_linux.rs — uinput keyboard (key map from match fn)
+│   └── keyboard_windows.rs — SendInput keyboard (key map from match fn)
 └── lua/
     ├── tables.lua     — con/key/mouse typed ref tables
     ├── bindings.lua   — bind.* DSL, press/release/instant/toggle/held/wait
@@ -57,34 +59,37 @@ src/
 ```
                   ┌─ Lua REPL (terminal input thread)
                   │
-SDL events → ControllerManager → ControllerEvent enum → match in main loop
-                  │                                          │
-            AxisMotion ──→ process_sticks (Lua) ────────────→ handle_btn_down/up
-                  │                                          │
-                  ├──→ on_sensor_event (Lua → fusion + globals)
-                  │         │
-                  │         └──→ process_gyro (Lua) → dev.mouse
-                  │                                          │
-                  └── Accelerometer ─→ on_sensor_event (Lua)  │
-                                                               ▼
-                   ┌──────────────────────────────────────────┐
-                   │  on_btn_down / on_btn_up (Lua)           │
-                   │  • Chord check → fire chord or continue  │
-                   │  • Double-press check                    │
-                   │  • Modeshift check → consume or continue │
-                   │  • Normal press binding                  │
-                   │  • Retroactive modeshift consumption      │
-                   └──────────────────────────────────────────┘
-                                 │
-                                 ▼
-                   ┌──────────────────────────┐
-                   │  Per-frame (after events) │
-                   │  • process_sticks (Lua)   │
-                   │  • on_update (Lua)        │
-                   │  • poll Lua coroutines    │
-                   │  • drain_actions → dev    │
-                   │  • dev.synchronize_all    │
-                   └──────────────────────────┘
+SDL events → ControllerEvent (touchpad/connect/disconnect only) → match in main loop
+                                                                     │
+                                                  Per-controller polling loop:
+                                                  │
+                                                  ├── poll_buttons → handle_btn_down/up
+                                                  │         │
+                                                  │         └── on_btn_down/up (Lua)
+                                                  │              • Chord check → fire or continue
+                                                  │              • Double-press check
+                                                  │              • Modeshift check → consume
+                                                  │              • Normal press
+                                                  │              • Retroactive consumption
+                                                  │
+                                                  ├── poll_axes → axis_state[controller]
+                                                  │
+                                                  └── poll_sensors → on_sensor_event (Lua)
+                                                            │
+                                                            └── process_gyro (Lua) → dev.mouse
+                                                                     │
+                                                                     ▼
+                              ┌─────────────────────────────────────────┐
+                              │  process_sticks (Lua → pressed/released │
+                              │    events → btn_down/btn_up)            │
+                              ├─────────────────────────────────────────┤
+                              │  on_update (Lua coroutine)              │
+                              ├─────────────────────────────────────────┤
+                              │  poll pending Lua coroutines            │
+                              ├─────────────────────────────────────────┤
+                              │  drain_actions → dev.apply              │
+                              │  → dev.synchronize_all                   │
+                              └─────────────────────────────────────────┘
 ```
 
 Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The Lua VM runs on the main thread; only the REPL thread is separate. The `mapper` mutex is locked briefly for button/key state queries, never held across Lua calls.
@@ -96,7 +101,7 @@ Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The
 - `con`/`key`/`mouse` typed ref tables (`tables.lua`)
 - `bind.*` DSL, user helpers (`press`, `release`, `instant`, `toggle`, `held`, `wait`) (`bindings.lua`)
 - `process_sticks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
-- `process_steicks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
+
 - `process_gyro()` — four gyro spaces, deadzone, calibration, enable/disable, acceleration curves (`gyro.lua`)
 - `on_sensor_event()` — fusion, gravity auto-init, bias subtraction (`gyro.lua`)
 - `make_curve()` — factory for acceleration curve helpers (`gyro.lua`)
@@ -123,7 +128,7 @@ Available from the REPL or from any config:
 
 All five functions are globals — your config can override any of them by defining a new function with the same name. Wrap a built-in by capturing it in a local first: `local builtin = process_gyro` then define your own `process_gyro(...)` that calls it. To restore defaults, reassign from the saved local. See the source files in `src/lua/` for each function's exact contract.
 
-Typed ref actions (e.g. `bind.press(con.a, key.space)`) are auto-wrapped as Lua functions via `extract_action()` / `extract_instant_action()` in `bindings.lua`:
+Typed ref actions (e.g. `bind.press(con.a, key.space)`) are auto-wrapped as Lua functions via `wrap_action(action, mode)` in `bindings.lua`:
 - `press` / `hold` / `chord` → wrapper calls `press(key.X)`
 - `release` / `tap` / `double_press` → wrapper calls `instant(key.X)`
 

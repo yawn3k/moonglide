@@ -38,7 +38,7 @@ end)
 
 ### `bind.tap(button, action)`
 
-Fires on quick press-release (held < 180 ms). Ignores longer holds so tap and hold can coexist on the same button.
+Fires on quick press-release (held < default hold_delay or 180 ms). Ignores longer holds so tap and hold can coexist on the same button. When both `bind.tap` and `bind.hold` exist on the same button, the tap window matches the hold delay to eliminate dead zone gap.
 
 ```lua
 bind.tap(con.x, mouse.left)
