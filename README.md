@@ -2,7 +2,9 @@
 
 [JoyShockMapper](https://github.com/Electronicks/JoyShockMapper) inspired controller remapper configured with Lua.
 
->**Early development.** Expect things to break. PRs and issues welcome.
+> **Early Development** - Moonglide is in pre-1.0 state. Syntax, APIs, and Lua globals may change between releases. If you distribute plugins watch the commit messages between pre-releases. Breaking changes will be called out in commit messages.
+
+> **Community** - Moonglide is supposed to be a community project. PRs, issues, and feature requests are all welcome. You can also DM me on Discord if you prefer: **@yawn3k**
 
 ## Docs
 
