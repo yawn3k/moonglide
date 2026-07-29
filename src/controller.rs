@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use sdl2::controller::{Axis, Button, GameController};
 use sdl2::sensor::SensorType;
@@ -19,6 +19,13 @@ const ALL_AXES: [Axis; 6] = [
 	Axis::TriggerLeft, Axis::TriggerRight,
 ];
 
+#[derive(Debug, Clone)]
+pub struct TouchpadFinger {
+	pub x: f32,
+	pub y: f32,
+	pub pressure: f32,
+}
+
 pub fn idx_to_button_name(idx: u8) -> String {
 	match idx {
 		0 => "a", 1 => "b", 2 => "x", 3 => "y",
@@ -34,14 +41,12 @@ pub fn idx_to_button_name(idx: u8) -> String {
 
 pub struct ControllerManager {
 	pub controllers: HashMap<u32, GameController>,
-	pub touch_fingers: HashSet<(u32, u32)>,
+	pub touchpad_state: HashMap<u32, HashMap<(u32, u32), TouchpadFinger>>,
 	sub: GameControllerSubsystem,
 }
 
 #[derive(Debug, Clone)]
 pub enum ControllerEvent {
-	TouchpadTouch,
-	TouchpadUntouch,
 	Connected(u32),
 	Disconnected(u32),
 }
@@ -50,7 +55,7 @@ impl ControllerManager {
 	pub fn open(sub: GameControllerSubsystem) -> Result<Self, String> {
 		let mut mgr = Self {
 			controllers: HashMap::new(),
-			touch_fingers: HashSet::new(),
+			touchpad_state: HashMap::new(),
 			sub,
 		};
 		let available = mgr
@@ -126,22 +131,28 @@ impl ControllerManager {
 		Some((gbuf[0], gbuf[1], gbuf[2], abuf[0], abuf[1], abuf[2]))
 	}
 
+	pub fn poll_touchpad(&self, id: u32) -> Option<&HashMap<(u32, u32), TouchpadFinger>> {
+		self.touchpad_state.get(&id)
+	}
+
 	pub fn handle_event(&mut self, event: &sdl2::event::Event) -> Vec<ControllerEvent> {
 		let mut out = Vec::new();
 
 		match event {
-			sdl2::event::Event::ControllerTouchpadDown { touchpad, finger, .. } => {
+			sdl2::event::Event::ControllerTouchpadDown { which, touchpad, finger, x, y, pressure, .. } => {
 				let key = (*touchpad, *finger);
-				if self.touch_fingers.is_empty() {
-					out.push(ControllerEvent::TouchpadTouch);
-				}
-				self.touch_fingers.insert(key);
+				self.touchpad_state.entry(*which).or_default().insert(key, TouchpadFinger { x: *x, y: *y, pressure: *pressure });
 			}
-			sdl2::event::Event::ControllerTouchpadUp { touchpad, finger, .. } => {
+			sdl2::event::Event::ControllerTouchpadMotion { which, touchpad, finger, x, y, pressure, .. } => {
 				let key = (*touchpad, *finger);
-				self.touch_fingers.remove(&key);
-				if self.touch_fingers.is_empty() {
-					out.push(ControllerEvent::TouchpadUntouch);
+				if let Some(fingers) = self.touchpad_state.get_mut(which) {
+					fingers.insert(key, TouchpadFinger { x: *x, y: *y, pressure: *pressure });
+				}
+			}
+			sdl2::event::Event::ControllerTouchpadUp { which, touchpad, finger, .. } => {
+				let key = (*touchpad, *finger);
+				if let Some(fingers) = self.touchpad_state.get_mut(which) {
+					fingers.remove(&key);
 				}
 			}
 			sdl2::event::Event::ControllerDeviceAdded { which, .. } => {
@@ -155,7 +166,7 @@ impl ControllerManager {
 			sdl2::event::Event::ControllerDeviceRemoved { which, .. } => {
 				out.push(ControllerEvent::Disconnected(*which));
 				self.controllers.remove(which);
-				self.touch_fingers.clear();
+				self.touchpad_state.remove(which);
 			}
 			_ => {}
 		}

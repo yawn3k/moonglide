@@ -187,12 +187,6 @@ fn main() {
 
 			for ce in ctrl_mgr.handle_event(&event) {
 				match ce {
-					ControllerEvent::TouchpadTouch => {
-						handle_btn_down("touchpad_touch", &mut state, &lua, &mut pending);
-					}
-					ControllerEvent::TouchpadUntouch => {
-						handle_btn_up("touchpad_touch", &mut state, &lua, &mut pending);
-					}
 					ControllerEvent::Connected(id) => println!("{}", style::green(&format!("controller connected (instance {})", id))),
 					ControllerEvent::Disconnected(id) => {
 						println!("{}", style::yellow(&format!("controller disconnected (instance {})", id)));
@@ -200,6 +194,8 @@ fn main() {
 						let _ = lua.globals().get::<mlua::Function>("cleanup_controller").map(|f| f.call::<()>((id,)));
 						state.axis_state.remove(&id);
 						state.prev_buttons.remove(&id);
+						let _ = lua.globals().set("_touchpad_touching", false);
+						let _ = lua.globals().set("_touchpad_fingers", lua.create_table().unwrap());
 					}
 				}
 			}
@@ -242,6 +238,26 @@ fn main() {
 					}
 				}
 			}
+
+			// ── touchpad position globals ──
+			if let Some(fingers) = ctrl_mgr.poll_touchpad(id) {
+				let touching = !fingers.is_empty();
+				if let Some(f0) = fingers.get(&(0, 0)) {
+					let _ = lua.globals().set("_touchpad_x", f0.x);
+					let _ = lua.globals().set("_touchpad_y", f0.y);
+					let _ = lua.globals().set("_touchpad_pressure", f0.pressure);
+				}
+				let ft = lua.create_table().unwrap();
+				for ((_tp, fid), f) in fingers {
+					let fe = lua.create_table().unwrap();
+					let _ = fe.set("x", f.x);
+					let _ = fe.set("y", f.y);
+					let _ = fe.set("pressure", f.pressure);
+					let _ = ft.set(*fid, fe);
+				}
+				let _ = lua.globals().set("_touchpad_fingers", ft);
+				let _ = lua.globals().set("_touchpad_touching", touching);
+			}
 		}
 
 		while let Ok(cmd) = repl_rx.try_recv() {
@@ -275,6 +291,29 @@ fn main() {
 							for dir in &released {
 								state.mapper.lock().unwrap().button_up(dir);
 								call_on_btn_up(&lua, dir, &mut pending);
+							}
+						}
+					}
+					Err(_) => {}
+				}
+			}
+		}
+
+		// ── process touchpad zones ──
+		if let Ok(on_touchpad) = lua.globals().get::<mlua::Function>("process_touchpad") {
+			for id in ctrl_mgr.connected_ids() {
+				match on_touchpad.call::<mlua::Table>((id,)) {
+					Ok(result) => {
+						if let Ok(pressed) = result.get::<Vec<String>>("pressed") {
+							for name in &pressed {
+								state.mapper.lock().unwrap().button_down(name);
+								call_on_btn_down(&lua, name, &mut pending);
+							}
+						}
+						if let Ok(released) = result.get::<Vec<String>>("released") {
+							for name in &released {
+								state.mapper.lock().unwrap().button_up(name);
+								call_on_btn_up(&lua, name, &mut pending);
 							}
 						}
 					}

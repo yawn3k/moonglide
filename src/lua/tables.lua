@@ -10,6 +10,7 @@ local con_names = {
 	"start", "back", "guide",
 	"left_trigger", "right_trigger",
 	"touchpad_click", "touchpad_touch",
+	"touchpad_touch_left", "touchpad_touch_right",
 	"misc_1",
 	"paddle_1", "paddle_2", "paddle_3", "paddle_4",
 	"left_stick_up", "left_stick_down", "left_stick_left", "left_stick_right",

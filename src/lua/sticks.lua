@@ -114,8 +114,37 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	return { pressed = pressed, released = released }
 end
 
+local prev_touchpad_zones = {}
+
+function process_touchpad(id)
+	local fingers = _touchpad_fingers
+	if not fingers then return { pressed = {}, released = {} } end
+
+	local left, right = false, false
+	for _, f in pairs(fingers) do
+		if f.x < 0.5 then left = true else right = true end
+	end
+	local any = left or right
+
+	local prev = prev_touchpad_zones[id] or {}
+	local pressed, released = {}, {}
+
+	if any and not prev.any then pressed[#pressed + 1] = "touchpad_touch" end
+	if not any and prev.any then released[#released + 1] = "touchpad_touch" end
+
+	if left and not prev.left then pressed[#pressed + 1] = "touchpad_touch_left" end
+	if not left and prev.left then released[#released + 1] = "touchpad_touch_left" end
+
+	if right and not prev.right then pressed[#pressed + 1] = "touchpad_touch_right" end
+	if not right and prev.right then released[#released + 1] = "touchpad_touch_right" end
+
+	prev_touchpad_zones[id] = { any = any, left = left, right = right }
+	return { pressed = pressed, released = released }
+end
+
 function cleanup_controller(which)
 	stick_state[which] = nil
 	trigger_state[which] = nil
 	trigger_last_time[which] = nil
+	prev_touchpad_zones[which] = nil
 end

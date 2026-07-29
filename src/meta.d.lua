@@ -21,6 +21,8 @@
 ---@field right_trigger string
 ---@field touchpad_click string
 ---@field touchpad_touch string
+---@field touchpad_touch_left string
+---@field touchpad_touch_right string
 ---@field misc_1 string
 ---@field paddle_1 string
 ---@field paddle_2 string
@@ -263,3 +265,14 @@ right_stick_outer_deadzone = 1.0
 left_ring_position = 0.8
 ---@type number
 right_ring_position = 0.8
+
+---@type boolean
+_touchpad_touching = false
+---@type number
+_touchpad_x = 0
+---@type number
+_touchpad_y = 0
+---@type number
+_touchpad_pressure = 0
+---@type table<integer, {x: number, y: number, pressure: number}>
+_touchpad_fingers = {}

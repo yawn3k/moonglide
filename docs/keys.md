@@ -31,7 +31,9 @@ Standard SDL gamepad button names (via `con` table):
 | `con.left_trigger` | `left_trigger` | Analog trigger |
 | `con.right_trigger` | `right_trigger` | Analog trigger |
 | `con.touchpad_click` | `touchpad_click` | Physical touchpad press |
-| `con.touchpad_touch` | `touchpad_touch` | Finger on touchpad surface |
+| `con.touchpad_touch` | `touchpad_touch` | Finger on touchpad surface (any zone) |
+| `con.touchpad_touch_left` | `touchpad_touch_left` | Finger on left half (x < 0.5) |
+| `con.touchpad_touch_right` | `touchpad_touch_right` | Finger on right half (x >= 0.5) |
 | `con.misc_1` | `misc_1` | Miscellaneous button |
 | `con.paddle_1` | `paddle_1` | Rear paddle 1 |
 | `con.paddle_2` | `paddle_2` | Rear paddle 2 |
@@ -126,6 +128,28 @@ Unrecognized SDL button indices produce `unknown_N` names (use as string literal
 ### Digits (spelled out)
 
 `key.zero`–`key.nine` (since `key.0` is Lua syntax error — digits use spelled-out names)
+
+## Touchpad position globals
+
+Updated every frame:
+
+| Global | Type | Range | Description |
+|--------|------|-------|-------------|
+| `_touchpad_touching` | bool | — | Any finger on touchpad |
+| `_touchpad_x` | float | 0–1 | Primary finger X position (0=left, 1=right) |
+| `_touchpad_y` | float | 0–1 | Primary finger Y position (0=top, 1=bottom) |
+| `_touchpad_pressure` | float | 0–1 | Primary finger pressure |
+| `_touchpad_fingers` | table | — | `{ [finger_id] = { x, y, pressure } }` for multitouch |
+
+```lua
+function update()
+    if _touchpad_touching and _touchpad_x > 0.5 then
+        gyro_enable()
+    else
+        gyro_disable()
+    end
+end
+```
 
 ## String literals are not accepted
 
