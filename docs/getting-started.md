@@ -92,6 +92,5 @@ the prerequisites above.
 - Analog stick to mouse
 - Virtual controller
 - REPL improvements
-- Full touchapd remapping and support
 - Flick stick
 - Compensate for windows pointer speed

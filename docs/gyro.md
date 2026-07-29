@@ -73,6 +73,7 @@ end)
 
 - `gyro_calibrate_start()` — begin collecting bias samples
 - `gyro_calibrate_stop()` — compute per-axis bias (X, Y, Z), subtract from readings
+- Bias is stored in `_gyro_bias_x/y/z` globals and persists across `reset()` and `reload()`
 
 ## Per-Frame Globals
 

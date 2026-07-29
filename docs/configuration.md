@@ -56,7 +56,7 @@ Only `hold_press_time` is read at config load only (not re-read from REPL).
 
 | Command | Effect |
 |---------|--------|
-| `reset()` | Clear all bindings, gyro state, stick state, config globals; release all held keys |
+| `reset()` | Clear all bindings, gyro state, stick state, config globals; release all held keys. Gyro calibration bias (`_gyro_bias_x/y/z`) is preserved. |
 | `reload()` | Same as `reset()`, then re-load the CLI config file from disk |
 | `gyro_enable()` / `gyro_disable()` | Toggle gyro on/off |
 | `gyro_calibrate_start()` / `gyro_calibrate_stop()` | Run gyro bias calibration |

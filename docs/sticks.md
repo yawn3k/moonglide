@@ -125,3 +125,44 @@ end)
 ```
 
 With `trigger_threshold = 3000`, the trigger must be pressed past ~9% (3000/32767) to activate. Increase the threshold for a stiffer activation point.
+
+## Touchpad
+
+The DualSense touchpad is polled every frame. Position data is exposed via Lua globals, and zone buttons fire through the normal `handle_btn_down/up` pipeline.
+
+### Position globals
+
+Updated every frame:
+
+| Global | Type | Range | Description |
+|--------|------|-------|-------------|
+| `_touchpad_touching` | bool | — | Any finger on touchpad |
+| `_touchpad_x` | float | 0–1 | Primary finger X position (0=left, 1=right) |
+| `_touchpad_y` | float | 0–1 | Primary finger Y position (0=top, 1=bottom) |
+| `_touchpad_pressure` | float | 0–1 | Primary finger pressure |
+| `_touchpad_fingers` | table | — | `{ [finger_id] = { x, y, pressure } }` for multitouch |
+
+### Zone buttons
+
+| Button | Condition |
+|--------|-----------|
+| `con.touchpad_touch` | Any finger on any zone |
+| `con.touchpad_touch_left` | Any finger with x < 0.5 |
+| `con.touchpad_touch_right` | Any finger with x ≥ 0.5 |
+
+```lua
+bind.press(con.touchpad_touch_right, gyro_hold)
+```
+
+### Overriding `process_touchpad()`
+
+The default implementation checks both halves of the touchpad and emits press/release events for the three zone buttons. Override it for custom zone layouts:
+
+```lua
+local builtin_touchpad = process_touchpad
+function process_touchpad(id)
+    local result = builtin_touchpad(id)
+    -- add custom logic (e.g. trackpad clicks)
+    return result
+end
+```

@@ -30,7 +30,7 @@ src/
 ├── config.rs          — loads Lua scripts (tables/bindings/sticks/gyro/events)
 ├── api.rs             — Lua ↔ Rust glue functions (_press_key, _is_held, log, etc.)
 ├── mapping.rs         — Mapper: button/axis state → active keyboard/mouse output
-├── controller.rs      — SDL controller open/close, poll_buttons/poll_axes/poll_sensors
+├── controller.rs      — SDL controller open/close, poll_buttons/poll_axes/poll_sensors/poll_touchpad
 ├── lua_coroutines.rs  — PendingThread, execute/poll Lua coroutines
 ├── output_devices.rs  — OutputDevices (mouse+kbd), apply + synchronize
 ├── frame_pacer.rs     — FramePacer (drift-compensated sleep at target FPS)
@@ -41,9 +41,9 @@ src/
 │   ├── keyboard_linux.rs — uinput keyboard (key map from match fn)
 │   └── keyboard_windows.rs — SendInput keyboard (key map from match fn)
 └── lua/
-    ├── tables.lua     — con/key/mouse typed ref tables
+    ├── tables.lua     — con/key/mouse typed ref tables (incl. touchpad_touch_left/right)
     ├── bindings.lua   — bind.* DSL, press/release/instant/toggle/held/wait
-    ├── sticks.lua     — process_sticks (deadzone, cross-gate, ring, triggers)
+    ├── sticks.lua     — process_sticks (deadzone, cross-gate, ring, triggers), process_touchpad, cleanup_controller
     ├── gyro.lua       — process_gyro (spaces, fusion, deadzone, calibration), on_sensor_event (fusion, gravity auto-init, bias)
     └── events.lua     — on_btn_down/up/update callbacks (chords, DP, modeshift, etc.)
 ```
@@ -59,7 +59,7 @@ src/
 ```
                   ┌─ Lua REPL (terminal input thread)
                   │
-SDL events → ControllerEvent (touchpad/connect/disconnect only) → match in main loop
+SDL events → ControllerEvent (connect/disconnect only) → match in main loop
                                                                      │
                                                   Per-controller polling loop:
                                                   │
@@ -74,22 +74,27 @@ SDL events → ControllerEvent (touchpad/connect/disconnect only) → match in m
                                                   │
                                                   ├── poll_axes → axis_state[controller]
                                                   │
-                                                  └── poll_sensors → on_sensor_event (Lua)
-                                                            │
-                                                            └── process_gyro (Lua) → dev.mouse
+                                                  ├── poll_sensors → on_sensor_event (Lua)
+                                                  │         │
+                                                  │         └── process_gyro (Lua) → dev.mouse
+                                                  │
+                                                  └── poll_touchpad → _touchpad_* globals
                                                                      │
                                                                      ▼
-                              ┌─────────────────────────────────────────┐
-                              │  process_sticks (Lua → pressed/released │
-                              │    events → btn_down/btn_up)            │
-                              ├─────────────────────────────────────────┤
-                              │  on_update (Lua coroutine)              │
-                              ├─────────────────────────────────────────┤
-                              │  poll pending Lua coroutines            │
-                              ├─────────────────────────────────────────┤
-                              │  drain_actions → dev.apply              │
-                              │  → dev.synchronize_all                   │
-                              └─────────────────────────────────────────┘
+                              ┌───────────────────────────────────────────┐
+                              │  process_sticks (Lua → pressed/released   │
+                              │    events → btn_down/btn_up)              │
+                              ├───────────────────────────────────────────┤
+                              │  process_touchpad (Lua → pressed/released │
+                              │    events → btn_down/btn_up)              │
+                              ├───────────────────────────────────────────┤
+                              │  on_update (Lua coroutine)                │
+                              ├───────────────────────────────────────────┤
+                              │  poll pending Lua coroutines              │
+                              ├───────────────────────────────────────────┤
+                              │  drain_actions → dev.apply                │
+                              │  → dev.synchronize_all                     │
+                              └───────────────────────────────────────────┘
 ```
 
 Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The Lua VM runs on the main thread; only the REPL thread is separate. The `mapper` mutex is locked briefly for button/key state queries, never held across Lua calls.
@@ -101,7 +106,8 @@ Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The
 - `con`/`key`/`mouse` typed ref tables (`tables.lua`)
 - `bind.*` DSL, user helpers (`press`, `release`, `instant`, `toggle`, `held`, `wait`) (`bindings.lua`)
 - `process_sticks()` — deadzone, cross-gate, ring, trigger processing (`sticks.lua`)
-
+- `process_touchpad()` — touchpad zone button detection (`sticks.lua`)
+- `cleanup_controller()` — stick/trigger/touchpad state cleanup on disconnect (`sticks.lua`)
 - `process_gyro()` — four gyro spaces, deadzone, calibration, enable/disable, acceleration curves (`gyro.lua`)
 - `on_sensor_event()` — fusion, gravity auto-init, bias subtraction (`gyro.lua`)
 - `make_curve()` — factory for acceleration curve helpers (`gyro.lua`)
@@ -116,7 +122,7 @@ Available from the REPL or from any config:
 
 | Function | Description |
 |----------|-------------|
-| `reset()` | Clear all bindings, gyro state, stick state, config globals, and release all held keys. Re-runs the DSL to reset all Lua-side state. |
+| `reset()` | Clear all bindings, gyro state, stick state, config globals, and release all held keys. Re-runs the DSL to reset all Lua-side state. Gyro calibration bias (`_gyro_bias_x/y/z`) is preserved. |
 | `reload()` | Same as `reset()`, then re-loads the CLI config file from disk. No-op if no config was given at launch. |
 
 ```lua
@@ -126,7 +132,7 @@ Available from the REPL or from any config:
 > reload()  -- re-reads the CLI config from disk
 ```
 
-All five functions are globals — your config can override any of them by defining a new function with the same name. Wrap a built-in by capturing it in a local first: `local builtin = process_gyro` then define your own `process_gyro(...)` that calls it. To restore defaults, reassign from the saved local. See the source files in `src/lua/` for each function's exact contract.
+All these functions are globals — your config can override any of them by defining a new function with the same name. Wrap a built-in by capturing it in a local first: `local builtin = process_gyro` then define your own `process_gyro(...)` that calls it. To restore defaults, reassign from the saved local. See the source files in `src/lua/` for each function's exact contract.
 
 Typed ref actions (e.g. `bind.press(con.a, key.space)`) are auto-wrapped as Lua functions via `wrap_action(action, mode)` in `bindings.lua`:
 - `press` / `hold` / `chord` → wrapper calls `press(key.X)`
@@ -184,12 +190,39 @@ Internally:
 - Both curves share state across frames; reset via `reset()`
 - Bias subtraction: `value - bias` for X, Y, Z axes
 - Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias (now 3 axes including Z)
+- Calibration bias stored in `_gyro_bias_x/y/z` globals — persists across `reset()` and `reload()`
 - Gravity auto-initialized from first valid accelerometer reading — no hardcoded orientation guess
 - Activation: `gyro_enable()`/`gyro_disable()`/`gyro_toggle()`/`gyro_hold()` called from bindings
 
 > Note: `player` and `world` spaces are **experimental** — `local_yaw` and `local_roll` are fully stable.
 
 See `src/lua/gyro.lua` for implementation.
+
+## Touchpad Processing
+
+`process_touchpad(id)` is called every frame in the main loop for each connected controller. It reads the `_touchpad_fingers` global (set by Rust from SDL poll data) and compares current zone state against the previous frame to emit press/release events for touchpad zone buttons:
+
+| Lua Global | Type | Range | Description |
+|------------|------|-------|-------------|
+| `_touchpad_touching` | bool | — | Any finger on touchpad |
+| `_touchpad_x` | float | 0–1 | Primary finger X position (0=left, 1=right) |
+| `_touchpad_y` | float | 0–1 | Primary finger Y position (0=top, 1=bottom) |
+| `_touchpad_pressure` | float | 0–1 | Primary finger pressure |
+| `_touchpad_fingers` | table | — | `{ [finger_id] = { x, y, pressure } }` for multitouch |
+
+Zone buttons available in the `con` table:
+
+| Button | Condition |
+|--------|-----------|
+| `con.touchpad_touch` | Any finger on any zone |
+| `con.touchpad_touch_left` | Any finger with x < 0.5 |
+| `con.touchpad_touch_right` | Any finger with x ≥ 0.5 |
+
+Internally: `process_touchpad()` checks both zones across all fingers, compares against `prev_touchpad_zones[id]`, and emits press/release events routed through the same `handle_btn_down/up` pipeline as physical buttons.
+
+`cleanup_controller(id)` clears touchpad zone state (plus stick and trigger state) on disconnect. It is called from Rust's disconnect handler and is also overridable.
+
+See `src/lua/sticks.lua` for implementation.
 
 ## Triggers
 
