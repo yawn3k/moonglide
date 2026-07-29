@@ -268,10 +268,4 @@ function _reset_internals()
 	update = nil
 	_toggled = {}
 	gyro_reset()
-	for _, name in ipairs({"_gyro_raw", "_accel_raw", "_gravity"}) do
-		local t = _G[name]
-		if t then t.x, t.y, t.z = 0, 0, 0 end
-	end
-	local o = _orientation
-	if o then o.w, o.x, o.y, o.z = 1, 0, 0, 0 end
 end

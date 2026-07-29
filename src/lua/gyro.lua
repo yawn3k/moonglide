@@ -51,9 +51,12 @@ local function vcross(x1, y1, z1, x2, y2, z2)
 end
 
 -- gyro state
+_gyro_bias_x = _gyro_bias_x or 0
+_gyro_bias_y = _gyro_bias_y or 0
+_gyro_bias_z = _gyro_bias_z or 0
+
 local gyro_state = {
 	active = false,
-	bias_x = 0, bias_y = 0, bias_z = 0,
 	sens_h = 1, sens_v = 1,
 	calibration = 45.454,
 	in_game_sens = 1,
@@ -117,7 +120,7 @@ function gyro(tbl)
 end
 
 function gyro_get_bias()
-	return gyro_state.bias_x, gyro_state.bias_y, gyro_state.bias_z
+	return _gyro_bias_x, _gyro_bias_y, _gyro_bias_z
 end
 
 function gyro_get_state()
@@ -164,9 +167,9 @@ function gyro_calibrate_stop()
 		sum_y = sum_y + s.y
 		sum_z = sum_z + s.z
 	end
-	gyro_state.bias_x = sum_x / n
-	gyro_state.bias_y = sum_y / n
-	gyro_state.bias_z = sum_z / n
+	_gyro_bias_x = sum_x / n
+	_gyro_bias_y = sum_y / n
+	_gyro_bias_z = sum_z / n
 	gyro_state.cal_samples = {}
 	gyro_state.calibrating = false
 	_info(string.format("gyro calibration complete (%d samples)", n))
@@ -338,9 +341,9 @@ function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)
 		return
 	end
 
-	local cgx = gx - gyro_state.bias_x
-	local cgy = gy - gyro_state.bias_y
-	local cgz = gz - gyro_state.bias_z
+	local cgx = gx - _gyro_bias_x
+	local cgy = gy - _gyro_bias_y
+	local cgz = gz - _gyro_bias_z
 	gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz = cgx, cgy, cgz
 
 	update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
@@ -400,9 +403,6 @@ function process_gyro(gx, gy, gz, dt)
 end
 
 function gyro_reset()
-	gyro_state.bias_x = 0
-	gyro_state.bias_y = 0
-	gyro_state.bias_z = 0
 	gyro_state.calibrating = false
 	gyro_state.cal_samples = {}
 	gyro_state.hold_button = nil
