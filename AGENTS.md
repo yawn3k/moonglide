@@ -247,10 +247,12 @@ Config globals read by Lua each frame (no Rust atomics — just Lua globals):
 | `instant_press_time` | 40 | — |
 | `hold_press_time` | 400 | [bindings.md](docs/bindings.md) |
 | `double_press_window` | 200 | [bindings.md](docs/bindings.md) |
-| `left_stick_inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) |
+| `left_stick_inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — scalar (circular) or `{h, v}` (cross/square) |
 | `left_stick_outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
-| `right_stick_inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) |
+| `right_stick_inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — scalar (circular) or `{h, v}` (cross/square) |
 | `right_stick_outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
+| `left_stick_diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) — degrees; lower = steeper tilt for diagonals |
+| `right_stick_diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) |
 | `left_ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
 | `right_ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
 

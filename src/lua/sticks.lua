@@ -4,7 +4,31 @@
 
 local MAX_AXIS = 32767
 
-local function apply_deadzone(s, inner, outer)
+-- scalar → {h, v}; table → horizontal, vertical
+local function parse_deadzone(val, default)
+	if type(val) == "table" then
+		local h = val[1] or default
+		local v = val[2] or h
+		return h, v
+	end
+	if val == nil then return default, default end
+	return val, val
+end
+
+-- per-axis deadzone: each axis is independent, zeroed below its inner
+-- threshold, then linearly rescaled over [inner, outer] → [0, 1]
+local function apply_axis(v, inner, outer)
+	local a = math.abs(v)
+	if a <= inner then return 0 end
+	if outer <= inner then return (v < 0 and -1 or 1) end
+	local scaled = (a - inner) / (outer - inner)
+	if scaled > 1 then scaled = 1 end
+	return (v < 0 and -1 or 1) * scaled
+end
+
+-- JSM-style circular deadzone: zeroed inside the inner circle, then radially
+-- rescaled over [inner, outer] → [0, 1], preserving the stick's angle
+local function apply_circular(s, inner, outer)
 	local len = (s.x * s.x + s.y * s.y) ^ 0.5
 	if len == 0 then return end
 	if len < inner then
@@ -19,30 +43,27 @@ local function apply_deadzone(s, inner, outer)
 	end
 end
 
-local function cross_gate(x, y, prefix, out)
-	if x == 0 and y == 0 then return end
-	local angle = math.atan2(y, x) * 180 / math.pi
-	if angle >= -22.5 and angle < 22.5 then
-		out[prefix .. "_right"] = true
-	elseif angle >= 22.5 and angle < 67.5 then
-		out[prefix .. "_up"] = true
-		out[prefix .. "_right"] = true
-	elseif angle >= 67.5 and angle < 112.5 then
-		out[prefix .. "_up"] = true
-	elseif angle >= 112.5 and angle < 157.5 then
-		out[prefix .. "_up"] = true
-		out[prefix .. "_left"] = true
-	elseif angle >= 157.5 or angle < -157.5 then
-		out[prefix .. "_left"] = true
-	elseif angle >= -157.5 and angle < -112.5 then
-		out[prefix .. "_down"] = true
-		out[prefix .. "_left"] = true
-	elseif angle >= -112.5 and angle < -67.5 then
-		out[prefix .. "_down"] = true
+-- scalar → circular (JSM-style); {h, v} table → per-axis cross/square
+local function apply_deadzone(s, val, default, outer)
+	if type(val) == "table" then
+		local h, v = parse_deadzone(val, default)
+		s.x = apply_axis(s.x, h, outer)
+		s.y = apply_axis(s.y, v, outer)
 	else
-		out[prefix .. "_down"] = true
-		out[prefix .. "_right"] = true
+		apply_circular(s, val == nil and default or val, outer)
 	end
+end
+
+local function cross_gate(x, y, prefix, out, da)
+	if x == 0 and y == 0 then return end
+	local card = 45 - (da or 22.5)
+	local angle = math.atan2(math.abs(y), math.abs(x)) * 180 / math.pi
+	local horiz = angle <= 90 - card
+	local vert = angle >= card
+	if horiz and x < 0 then out[prefix .. "_left"] = true
+	elseif horiz then out[prefix .. "_right"] = true end
+	if vert and y > 0 then out[prefix .. "_up"] = true
+	elseif vert then out[prefix .. "_down"] = true end
 end
 
 local stick_state = {}
@@ -53,22 +74,22 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	local nl = { x = lx / MAX_AXIS, y = ly / MAX_AXIS }
 	local nr = { x = rx / MAX_AXIS, y = ry / MAX_AXIS }
 
-	local li = left_stick_inner_deadzone or 0.15
 	local lo = left_stick_outer_deadzone or 1.0
-	local ri = right_stick_inner_deadzone or 0.15
 	local ro = right_stick_outer_deadzone or 1.0
 	local lr = left_ring_position or 0.8
 	local rr = right_ring_position or 0.8
 
-	apply_deadzone(nl, li, lo)
-	apply_deadzone(nr, ri, ro)
+	apply_deadzone(nl, left_stick_inner_deadzone, 0.15, lo)
+	apply_deadzone(nr, right_stick_inner_deadzone, 0.15, ro)
 
 	local current = {}
-	cross_gate(nl.x, nl.y, "left_stick", current)
-	cross_gate(nr.x, nr.y, "right_stick", current)
+	cross_gate(nl.x, nl.y, "left_stick", current, left_stick_diagonal_angle or 22.5)
+	cross_gate(nr.x, nr.y, "right_stick", current, right_stick_diagonal_angle or 22.5)
 
-	local llen = (nl.x * nl.x + nl.y * nl.y) ^ 0.5
-	local rlen = (nr.x * nr.x + nr.y * nr.y) ^ 0.5
+	local llen = ((lx / MAX_AXIS) ^ 2 + (ly / MAX_AXIS) ^ 2) ^ 0.5
+	local rlen = ((rx / MAX_AXIS) ^ 2 + (ry / MAX_AXIS) ^ 2) ^ 0.5
+	if nl.x == 0 and nl.y == 0 then llen = 0 end
+	if nr.x == 0 and nr.y == 0 then rlen = 0 end
 	if llen > 0 and llen < lr then current["left_ring_inner"] = true end
 	if llen > lr then current["left_ring_outer"] = true end
 	if rlen > 0 and rlen < rr then current["right_ring_inner"] = true end

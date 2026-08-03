@@ -253,14 +253,18 @@ hold_press_time = 400
 instant_press_time = 40
 ---@type integer
 double_press_window = 200
----@type number
+---@type number|number[]
 left_stick_inner_deadzone = 0.15
 ---@type number
 left_stick_outer_deadzone = 1.0
----@type number
+---@type number|number[]
 right_stick_inner_deadzone = 0.15
 ---@type number
 right_stick_outer_deadzone = 1.0
+---@type number
+left_stick_diagonal_angle = 22.5
+---@type number
+right_stick_diagonal_angle = 22.5
 ---@type number
 left_ring_position = 0.8
 ---@type number

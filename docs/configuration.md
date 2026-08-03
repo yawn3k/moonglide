@@ -46,6 +46,7 @@ After each REPL command, the following globals are re-read and applied immediate
 - `double_press_window`
 - `left_stick_inner_deadzone`, `left_stick_outer_deadzone`
 - `right_stick_inner_deadzone`, `right_stick_outer_deadzone`
+- `left_stick_diagonal_angle`, `right_stick_diagonal_angle`
 - `left_ring_position`, `right_ring_position`
 - Any `bind.*` calls
 - `reset()`, `reload()`, `gyro_*` calls
