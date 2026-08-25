@@ -143,8 +143,23 @@ fn main() {
 	let mut ctrl_mgr = init_controllers(game_controller_subsys);
 	println!("{}", style::info(&format!("{} controller(s) found at startup", ctrl_mgr.controllers.len())));
 
-	let mouse = VirtualMouse::new().ok();
-	let kbd = VirtualKeyboard::new().ok();
+	let mouse = match VirtualMouse::new() {
+		Ok(m) => Some(m),
+		Err(e) => {
+			eprintln!("{}", style::err(&format!("mouse output unavailable: {e}")));
+			None
+		}
+	};
+	let kbd = match VirtualKeyboard::new() {
+		Ok(k) => Some(k),
+		Err(e) => {
+			eprintln!("{}", style::err(&format!("keyboard output unavailable: {e}")));
+			None
+		}
+	};
+	if mouse.is_none() && kbd.is_none() {
+		eprintln!("{}", style::err("no output devices available — bindings will have no effect"));
+	}
 
 	let load_globals = |lua: &Lua| {
 		LOG_LEVEL.store(lua.globals().get::<u8>("log_level").unwrap_or(0), Ordering::Relaxed);
@@ -234,9 +249,7 @@ fn main() {
 							let dx = result.get("dx").unwrap_or(0.0);
 							let dy = result.get("dy").unwrap_or(0.0);
 							if dx != 0.0 || dy != 0.0 {
-								if let Some(mouse) = state.dev.mouse.as_mut() {
-									let _ = mouse.move_mouse(dx, dy);
-								}
+								state.dev.move_mouse(dx, dy);
 							}
 						}
 						Err(e) => style::err_once("process_gyro", &format!("process_gyro error: {e}")),
