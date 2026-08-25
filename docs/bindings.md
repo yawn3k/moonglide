@@ -108,6 +108,8 @@ bind.chord({con.left_shoulder, con.right_shoulder}, key.f)  -- same as → funct
 
 Fires when the button is pressed twice within the window. Default window is `double_press_window` (200 ms). Override with `{window = ms}`.
 
+If the same button also has a `bind.tap`, a lone tap is deferred until the window expires: a second press within the window fires the double-press instead, otherwise the tap fires.
+
 ```lua
 bind.double_press(con.b, function()
     instant(key.tab)

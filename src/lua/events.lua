@@ -41,6 +41,7 @@ local function check_double_press(btn)
 				_current_btn = btn
 				dp.func()
 				consumed[btn] = true
+				deferred_taps[btn] = nil
 				return true
 			end
 		end
@@ -230,10 +231,14 @@ function on_update()
 		end
 	end
 
-	-- deferred tap (double-press window)
+	-- deferred tap (double-press window): fire if no second press arrived
 	for btn, d in pairs(deferred_taps) do
 		if (_now() - d.press_at) * 1000 >= d.window then
 			deferred_taps[btn] = nil
+			if not consumed[btn] and not _is_held(btn) then
+				_current_btn = btn
+				d.func()
+			end
 		end
 	end
 
