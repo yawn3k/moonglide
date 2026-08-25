@@ -25,8 +25,11 @@ cargo build --release           # Linux (uinput + LuaJIT)
 cargo run --release                          # no config (defaults only)
 cargo run --release -- ./config.lua          # custom config
 nix build .#moonglide           # nix package (lean SDL3: no GL/audio/video)
-nix bundle --bundler . .#moonglide -o out.AppImage   # self-contained AppImage
-                                                # (in nix develop: moonglide-bundle)
+nix bundle --bundler . .#moonglide -o .t && cp -L .t moonglide.AppImage && rm .t
+                                                # self-contained AppImage as a REAL file at
+                                                # root (in nix develop: moonglide-bundle)
+cp -f "$(nix build --no-link --print-out-paths .#moonglide)/bin/moonglide" moonglide
+                                                # real binary at repo root (runs via local nix store)
 ```
 
 Releases are manual (JSM-style, no CI): tag locally, bundle, upload with

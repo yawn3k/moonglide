@@ -11,4 +11,5 @@ moonglide.d.lua
 # release artifacts
 /result
 *.AppImage
+/moonglide
 moonglide-windows.zip

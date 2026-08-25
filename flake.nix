@@ -10,7 +10,7 @@
 		devShells.${system}.default = pkgs.mkShell {
 			buildInputs = with pkgs; [ SDL2 luajit udev pkg-config cargo rustc ];
 			shellHook = ''
-				alias build_release='nix bundle --bundler . .#moonglide'
+				alias buildRelease='nix bundle --bundler . .#moonglide -o .bundle-tmp && cp -L .bundle-tmp moonglide.AppImage && rm .bundle-tmp'
 			'';
 		};
 
