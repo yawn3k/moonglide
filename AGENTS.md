@@ -24,7 +24,15 @@ nix develop                     # dev shell (SDL2 + Lua + Rust deps, Linux x86_6
 cargo build --release           # Linux (uinput + LuaJIT)
 cargo run --release                          # no config (defaults only)
 cargo run --release -- ./config.lua          # custom config
+nix build .#moonglide           # nix package (lean SDL3: no GL/audio/video)
+nix bundle --bundler . .#moonglide -o out.AppImage   # self-contained AppImage
+                                                # (in nix develop: moonglide-bundle)
 ```
+
+Releases are manual (JSM-style, no CI): tag locally, bundle, upload with
+`gh release create vX.Y.Z out.AppImage --generate-notes`. The Windows exe must
+be built on a real Windows machine (`release-windows.bat` at the repo root);
+there is no cross-compilation.
 
 **Windows:** `cargo build --release` (SendInput + bundled SDL2 + Lua 5.4).
 Requires VS Build Tools and CMake. See [docs/getting-started.md](docs/getting-started.md).

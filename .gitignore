@@ -7,3 +7,8 @@
 .vscode/
 .idea/
 moonglide.d.lua
+
+# release artifacts
+/result
+*.AppImage
+moonglide-windows.zip

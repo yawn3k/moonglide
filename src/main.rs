@@ -32,6 +32,56 @@ pub(crate) fn log_msg(level: u8, msg: &str) {
 	}
 }
 
+// installed system-wide by --gen-udev; grants uinput access to the "input" group
+const UDEV_RULE: &str =
+	"KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"input\", OPTIONS+=\"static_node=uinput\"\n";
+
+// run a helper command, printing the manual equivalent on failure
+fn try_run(manual: &str, cmd: &mut std::process::Command) -> bool {
+	match cmd.status() {
+		Ok(s) if s.success() => true,
+		Ok(s) => {
+			eprintln!("{}", style::err(&format!("`{manual}` failed ({s}) — run it manually")));
+			false
+		}
+		Err(e) => {
+			eprintln!("{}", style::err(&format!("`{manual}` failed ({e}) — run it manually")));
+			false
+		}
+	}
+}
+
+fn run_gen_udev() -> ! {
+	if std::env::consts::OS != "linux" {
+		println!("--gen-udev is not applicable on {}", std::env::consts::OS);
+		std::process::exit(0);
+	}
+
+	let dst = "/etc/udev/rules.d/70-moonglide.rules";
+	if let Err(_) = std::fs::write(dst, UDEV_RULE) {
+		eprintln!("{}", style::err("cannot write /etc/udev/rules.d/ (permission denied). run as sudo"));
+		std::process::exit(1);
+	}
+	println!("installed {}", style::info(dst));
+
+	let mut ok = true;
+	ok &= try_run("sudo udevadm control --reload", std::process::Command::new("udevadm").args(["control", "--reload"]));
+	ok &= try_run("sudo udevadm trigger", std::process::Command::new("udevadm").arg("trigger"));
+
+	match std::env::var("SUDO_USER") {
+		Ok(user) if !user.is_empty() => {
+			ok &= try_run(
+				&format!("sudo usermod -aG input {user}"),
+				std::process::Command::new("usermod").args(["-aG", "input", &user]),
+			);
+		}
+		_ => println!("{}", style::dim("skipped group add (not invoked through sudo)")),
+	}
+
+	println!("done — log out/in for group changes to take effect");
+	std::process::exit(if ok { 0 } else { 1 });
+}
+
 struct OutputState {
 	dev: OutputDevices,
 	mapper: Arc<Mutex<Mapper>>,
@@ -57,6 +107,7 @@ fn parse_args() -> Option<String> {
 					}
 				}
 			}
+			"--gen-udev" => run_gen_udev(),
 			flag if flag.starts_with("--") => {
 				eprintln!("{}", style::err(&format!("unknown flag: {flag}")));
 				eprintln!("usage: moonglide [config.lua]");

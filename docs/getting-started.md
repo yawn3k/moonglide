@@ -47,6 +47,16 @@ While it's running, type Lua commands in the terminal (REPL) to adjust on the fl
 
 Press **Escape** to quit.
 
+### Permissions (Linux)
+
+Moonglide writes keyboard/mouse input through `/dev/uinput`, which is root-only by default. Install the udev rule once:
+
+```bash
+sudo moonglide --gen-udev    # installs rule, reloads udev, adds your user to "input"
+```
+
+Log out and back in afterwards (or run `newgrp input`). On Windows this step does not exist.
+
 Reload or switch configs without restarting:
 
 ```lua
@@ -78,6 +88,8 @@ cargo build --release
 cargo run --release
 cargo run --release -- ./config.lua
 ```
+
+`release-windows.bat` (repo root) builds and zips `moonglide-windows.zip` in one step.
 
 > If you get a CMake compatibility error, make sure `.cargo/config.toml` exists
 > with `[env] CMAKE_POLICY_VERSION_MINIMUM = "3.5"` — this file is checked into
