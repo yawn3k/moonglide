@@ -1,6 +1,6 @@
 # Gyro
 
-Gyro maps controller rotation to mouse movement. Uses sensor fusion (JSM-style complementary filter) for reliable gravity/orientation tracking across all four gyro spaces.
+Gyro maps controller rotation to mouse movement. Uses sensor fusion (JSM-style complementary filter) for gravity/orientation tracking in the `player` and `world` gyro spaces; `local_yaw` and `local_roll` read the raw bias-corrected gyro directly and skip fusion entirely.
 
 ## Config
 
@@ -54,7 +54,7 @@ Four spaces controlling how rotation maps to mouse movement:
 
 **`player`** and **`world`** use gravity (auto-initialized from the first accelerometer reading) to project gyro rotation onto world axes. Works in any controller orientation.
 
-> Note: `player` and `world` are **experimental** — the gravity projection may behave unexpectedly in some orientations. `local_yaw` and `local_roll` are confirmed working correctly.
+> Note: `player` and `world` are **experimental**. The fusion filter's internal units were corrected (deg/s + g, matching JSM/GamepadMotionHelpers) — if you tried these spaces before that fix, re-evaluate them. `local_yaw` and `local_roll` are confirmed working correctly and are unaffected by fusion.
 
 ## Calibration
 
@@ -83,12 +83,17 @@ Updated every sensor event (~2000 Hz combined gyro + accel):
 |--------|---------|
 | `_gyro_raw` | Latest raw gyro `{x, y, z}` (rad/s, before bias subtraction) |
 | `_accel_raw` | Latest raw accelerometer `{x, y, z}` (m/s²) |
+
+Updated only while a fusion space (`player` / `world`) is active — frozen otherwise:
+
+| Global | Content |
+|--------|---------|
 | `_gravity` | Current estimated gravity direction `{x, y, z}` (normalized) |
 | `_orientation` | Current orientation quaternion `{x, y, z, w}` |
 
 ## Sensor Event Callback
 
-`on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)` is called on every sensor event (gyro AND accel). Can be overridden for custom calibration, fusion, or logging. The default implementation handles bias, JSM-style complementary filter, gravity tracking, and orientation.
+`on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)` is called on every sensor event (gyro AND accel). Can be overridden for custom calibration, fusion, or logging. The default implementation handles bias and calibration sampling on every event; the JSM-style complementary filter (gravity tracking + orientation) runs only when the current space is `player` or `world`.
 
 ## Acceleration Curves
 

@@ -181,8 +181,8 @@ See [docs/gyro.md](docs/gyro.md) for gyro modes, sensitivity, calibration, and a
 
 Internally:
 - **Four spaces**: `local_yaw` (default, yaw→X pitch→Y), `local_roll` (roll→X pitch→Y), `player` (world-horizontal yaw + local pitch via JSM), `world` (both axes world-relative via JSM)
-- **Sensor fusion**: JSM-style complementary filter — gyro rotation → quaternion → accel smoothing + shakiness → gravity correction → quaternion tilt correction
-- **on_sensor_event()** called on every gyro AND accel event (~2000 Hz combined): updates `_gravity`/`_orientation`/`_gyro_raw`/`_accel_raw` globals, handles calibration samples (gated on `is_gyro`), runs bias subtraction, drives fusion
+- **Sensor fusion**: JSM-style complementary filter — gyro rotation → quaternion → accel smoothing + shakiness → gravity correction → quaternion tilt correction. Runs **only for `player`/`world` spaces** (internal units deg/s + g, matching GamepadMotionHelpers); `local_yaw`/`local_roll` bypass fusion entirely
+- **on_sensor_event()** called on every gyro AND accel event (~2000 Hz combined): updates `_gyro_raw`/`_accel_raw` globals, handles calibration samples (gated on `is_gyro`); runs bias subtraction and drives fusion (fusion spaces only, which also sync `_gravity`/`_orientation`)
 - **Gyro deadzone**: configurable in deg/s (`GYRO_CUTOFF_SPEED`), suppresses output below threshold on per-frame velocity (2D magnitude after space transform)
 - **Acceleration curves**: `gyro { acceleration = fn }` — user-defined function that takes raw speed (deg/s) and returns a multiplier; applied after sensitivity/deadzone, before sub-pixel accumulation
 - `curve.precision { threshold, min_factor }` — smoothstep 0→1×, configurable via table call

@@ -3,11 +3,12 @@
 
 local RAD_TO_DEG = 180 / math.pi
 
--- fusion constants
+-- fusion constants (internal units: deg/s + g, matching GamepadMotionHelpers)
 local HALF_TIME = 0.25
 local STILL_THRESH = 0.01
 local SHAKY_THRESH = 0.4
 local WORLD_SIDE_REDUCTION = 0.125
+local G_MSS = 9.81 -- SDL accel reports m/s²
 
 -- quaternion math (internal, no table allocs)
 local function qmul(w1, x1, y1, z1, w2, x2, y2, z2)
@@ -65,15 +66,11 @@ local gyro_state = {
 	calibrating = false,
 	hold_button = nil,
 
-	-- sensor fusion state
+	-- sensor fusion state (only maintained for player/world spaces)
 	quat = { w = 1, x = 0, y = 0, z = 0 },
 	grav = { x = 0, y = 0, z = 0 },
 	shakiness = 0,
 	smooth_accel = { x = 0, y = 0, z = 0 },
-	sensor_last_time = nil,
-
-	-- calibrated gyro (set by on_sensor_event, read by process_gyro)
-	cal_gx = 0, cal_gy = 0, cal_gz = 0,
 
 	-- flag for gravity auto-init
 	grav_initialized = false,
@@ -91,6 +88,21 @@ local gyro_state = {
 -- init gravity/orientation globals from module load
 _gravity.x, _gravity.y, _gravity.z = 0, 0, 0
 _orientation.w, _orientation.x, _orientation.y, _orientation.z = 1, 0, 0, 0
+
+-- fusion state only matters for player/world spaces; discard when switching
+local function reset_fusion()
+	local s = gyro_state
+	s.quat.w, s.quat.x, s.quat.y, s.quat.z = 1, 0, 0, 0
+	s.grav.x, s.grav.y, s.grav.z = 0, 0, 0
+	s.shakiness = 0
+	s.smooth_accel.x, s.smooth_accel.y, s.smooth_accel.z = 0, 0, 0
+	s.grav_initialized = false
+end
+
+-- fusion is only consumed by the player/world spaces; skip entirely otherwise
+local function fusion_needed()
+	return gyro_state.space == "player" or gyro_state.space == "world"
+end
 
 local function parse_sens(val)
 	if type(val) == "table" then
@@ -110,7 +122,10 @@ function gyro(tbl)
 	gyro_state.in_game_sens = tbl.in_game_sens or gyro_state.in_game_sens
 	gyro_state.deadzone = tbl.deadzone or gyro_state.deadzone
 	if tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world" then
-		gyro_state.space = tbl.space
+		if gyro_state.space ~= tbl.space then
+			gyro_state.space = tbl.space
+			reset_fusion()
+		end
 	end
 	if type(tbl.acceleration) == "function" then
 		gyro_state.accel_fn = tbl.acceleration
@@ -235,10 +250,9 @@ local function correct_quaternion_tilt()
 	local q = gyro_state.quat
 	local gv = gyro_state.grav
 	do
-		local len = math.sqrt(q.w*q.w + q.x*q.x + q.y*q.y + q.z*q.z)
-		local gw, gqx, gqy, gqz = q.w/len, q.x/len, q.y/len, q.z/len
-		local gdir_x, gdir_y, gdir_z = qrot_vec(gv.x, gv.y, gv.z, gw, gqx, gqy, gqz)
-		local _, gux, guy, guz = vnorm(gdir_x, gdir_y, gdir_z)
+		-- conjugation direction is scale-invariant, so an unnormalized quat is fine here
+		local gdir_x, gdir_y, gdir_z = qrot_vec(gv.x, gv.y, gv.z, q.w, q.x, q.y, q.z)
+		local gux, guy, guz = vnorm(gdir_x, gdir_y, gdir_z)
 		local err_angle = math.acos(math.max(-1, math.min(1, vdot(0, -1, 0, gux, guy, guz))))
 		local flat_x, flat_y, flat_z = vcross(gdir_x, gdir_y, gdir_z, 0, -1, 0)
 		local flat_len = vlen(flat_x, flat_y, flat_z)
@@ -321,6 +335,16 @@ function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)
 	_gyro_raw.x, _gyro_raw.y, _gyro_raw.z = gx, gy, gz
 	_accel_raw.x, _accel_raw.y, _accel_raw.z = ax, ay, az
 
+	if gyro_state.calibrating and is_gyro then
+		gyro_state.cal_samples[#gyro_state.cal_samples + 1] = { x = gx, y = gy, z = gz }
+		if #gyro_state.cal_samples % 100 == 0 then
+			log(1, string.format("calibrating... %d samples collected", #gyro_state.cal_samples))
+		end
+		return
+	end
+
+	if not fusion_needed() then return end
+
 	-- auto-init gravity from first valid accel reading
 	if not gyro_state.grav_initialized then
 		local amag = vlen(ax, ay, az)
@@ -333,23 +357,17 @@ function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)
 		end
 	end
 
-	if gyro_state.calibrating and is_gyro then
-		gyro_state.cal_samples[#gyro_state.cal_samples + 1] = { x = gx, y = gy, z = gz }
-		if #gyro_state.cal_samples % 100 == 0 then
-			log(1, string.format("calibrating... %d samples collected", #gyro_state.cal_samples))
-		end
-		return
-	end
-
-	local cgx = gx - _gyro_bias_x
-	local cgy = gy - _gyro_bias_y
-	local cgz = gz - _gyro_bias_z
-	gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz = cgx, cgy, cgz
-
-	update_fusion(cgx, cgy, cgz, ax, ay, az, dt)
+	-- sensors deliver rad/s and m/s²; the fusion filter expects deg/s and g
+	update_fusion(
+		(gx - _gyro_bias_x) * RAD_TO_DEG,
+		(gy - _gyro_bias_y) * RAD_TO_DEG,
+		(gz - _gyro_bias_z) * RAD_TO_DEG,
+		ax / G_MSS, ay / G_MSS, az / G_MSS,
+		dt)
 
 	_gravity.x, _gravity.y, _gravity.z = gyro_state.grav.x, gyro_state.grav.y, gyro_state.grav.z
-	_orientation.x, _orientation.y, _orientation.z, _orientation.w = gyro_state.quat.x, gyro_state.quat.y, gyro_state.quat.z, gyro_state.quat.w
+	_orientation.x, _orientation.y, _orientation.z, _orientation.w =
+		gyro_state.quat.x, gyro_state.quat.y, gyro_state.quat.z, gyro_state.quat.w
 end
 
 -- called by Rust once per frame
@@ -363,7 +381,9 @@ function process_gyro(gx, gy, gz, dt)
 	if gyro_state.calibrating then return {} end
 	if not gyro_state.active then return {} end
 
-	local cgx, cgy, cgz = gyro_state.cal_gx, gyro_state.cal_gy, gyro_state.cal_gz
+	local cgx = gx - _gyro_bias_x
+	local cgy = gy - _gyro_bias_y
+	local cgz = gz - _gyro_bias_z
 	local gv = _gravity
 
 	local deg_x_s, deg_y_s
@@ -409,17 +429,9 @@ function gyro_reset()
 	gyro_state.active = false
 	gyro_state.accum_x = 0
 	gyro_state.accum_y = 0
-	gyro_state.quat = { w = 1, x = 0, y = 0, z = 0 }
-	gyro_state.grav = { x = 0, y = 0, z = 0 }
-	gyro_state.grav_initialized = false
-	gyro_state.shakiness = 0
-	gyro_state.smooth_accel = { x = 0, y = 0, z = 0 }
-	gyro_state.sensor_last_time = nil
+	reset_fusion()
 	gyro_state.deadzone = 0
 	gyro_state.space = "local_yaw"
-	gyro_state.cal_gx = 0
-	gyro_state.cal_gy = 0
-	gyro_state.cal_gz = 0
 	gyro_state.accel_fn = nil
 
 	_gravity.x, _gravity.y, _gravity.z = 0, 0, 0
