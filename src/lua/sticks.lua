@@ -70,6 +70,16 @@ local stick_state = {}
 local trigger_state = {}
 local trigger_last_time = {}
 
+-- event tables returned to Rust; reused across calls to avoid per-frame
+-- table garbage (Rust drains them before the next call)
+local stick_events = { pressed = {}, released = {} }
+local touch_events = { pressed = {}, released = {} }
+
+local function reset_events(ev)
+	for k in pairs(ev.pressed) do ev.pressed[k] = nil end
+	for k in pairs(ev.released) do ev.released[k] = nil end
+end
+
 function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	local nl = { x = lx / MAX_AXIS, y = ly / MAX_AXIS }
 	local nr = { x = rx / MAX_AXIS, y = ry / MAX_AXIS }
@@ -98,8 +108,9 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	local prev = stick_state[which] or {}
 	stick_state[which] = current
 
-	local pressed = {}
-	local released = {}
+	local ev = stick_events
+	reset_events(ev)
+	local pressed, released = ev.pressed, ev.released
 	for k, _ in pairs(current) do
 		if not prev[k] then pressed[#pressed + 1] = k end
 	end
@@ -132,14 +143,16 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	trigger_state[which] = t
 	trigger_last_time[which] = tl
 
-	return { pressed = pressed, released = released }
+	return ev
 end
 
 local prev_touchpad_zones = {}
 
 function process_touchpad(id)
+	local ev = touch_events
+	reset_events(ev)
 	local fingers = _touchpad_fingers
-	if not fingers then return { pressed = {}, released = {} } end
+	if not fingers then return ev end
 
 	local left, right = false, false
 	for _, f in pairs(fingers) do
@@ -148,7 +161,7 @@ function process_touchpad(id)
 	local any = left or right
 
 	local prev = prev_touchpad_zones[id] or {}
-	local pressed, released = {}, {}
+	local pressed, released = ev.pressed, ev.released
 
 	if any and not prev.any then pressed[#pressed + 1] = "touchpad_touch" end
 	if not any and prev.any then released[#released + 1] = "touchpad_touch" end
@@ -160,7 +173,7 @@ function process_touchpad(id)
 	if not right and prev.right then released[#released + 1] = "touchpad_touch_right" end
 
 	prev_touchpad_zones[id] = { any = any, left = left, right = right }
-	return { pressed = pressed, released = released }
+	return ev
 end
 
 function cleanup_controller(which)

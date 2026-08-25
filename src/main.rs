@@ -93,6 +93,8 @@ fn init_lua(mapper: &Arc<Mutex<Mapper>>, config_path: Option<String>) -> Lua {
 	let _ = lua.globals().set("_accel_raw", lua.create_table().unwrap());
 	let _ = lua.globals().set("_gravity", lua.create_table().unwrap());
 	let _ = lua.globals().set("_orientation", lua.create_table().unwrap());
+	let _ = lua.globals().set("_touchpad_touching", false);
+	let _ = lua.globals().set("_touchpad_fingers", lua.create_table().unwrap());
 
 	config::setup_dsl(&lua).unwrap_or_else(|e| {
 		eprintln!("{}", style::err(&format!("setup_dsl: {}", e)));
@@ -179,6 +181,8 @@ fn main() {
 	println!("{}", style::dim("Type Lua commands in the terminal."));
 
 	let mut pending: Vec<PendingThread> = Vec::new();
+	let mut btn_buf: Vec<(u8, bool)> = Vec::new();
+	let mut ids_buf: Vec<u32> = Vec::new();
 	let mut pacer = frame_pacer::FramePacer::new(1000.0);
 
 	let (repl_tx, repl_rx) = std::sync::mpsc::channel::<String>();
@@ -222,8 +226,11 @@ fn main() {
 			.unwrap_or(0.0);
 		state.last_frame_time = Some(Instant::now());
 
-		for id in ctrl_mgr.connected_ids() {
-			for (btn_idx, pressed) in ctrl_mgr.poll_buttons(id, state.prev_buttons.entry(id).or_insert(0)) {
+		ids_buf.clear();
+		ids_buf.extend(ctrl_mgr.connected_ids());
+		for &id in &ids_buf {
+			ctrl_mgr.poll_buttons(id, state.prev_buttons.entry(id).or_insert(0), &mut btn_buf);
+			for (btn_idx, pressed) in btn_buf.iter().copied() {
 				let name = idx_to_button_name(btn_idx);
 				if pressed {
 					handle_btn_down(&name, &mut state, &lua, &mut pending);
@@ -258,24 +265,26 @@ fn main() {
 				}
 			}
 
-			// ── touchpad position globals ──
-			if let Some(fingers) = ctrl_mgr.poll_touchpad(id) {
-				let touching = !fingers.is_empty();
-				if let Some(f0) = fingers.get(&(0, 0)) {
-					let _ = lua.globals().set("_touchpad_x", f0.x);
-					let _ = lua.globals().set("_touchpad_y", f0.y);
-					let _ = lua.globals().set("_touchpad_pressure", f0.pressure);
+			// ── touchpad position globals (rebuilt only when touch state changed) ──
+			if ctrl_mgr.take_touchpad_dirty(id) {
+				if let Some(fingers) = ctrl_mgr.poll_touchpad(id) {
+					let touching = !fingers.is_empty();
+					if let Some(f0) = fingers.get(&(0, 0)) {
+						let _ = lua.globals().set("_touchpad_x", f0.x);
+						let _ = lua.globals().set("_touchpad_y", f0.y);
+						let _ = lua.globals().set("_touchpad_pressure", f0.pressure);
+					}
+					let ft = lua.create_table().unwrap();
+					for ((_tp, fid), f) in fingers {
+						let fe = lua.create_table().unwrap();
+						let _ = fe.set("x", f.x);
+						let _ = fe.set("y", f.y);
+						let _ = fe.set("pressure", f.pressure);
+						let _ = ft.set(*fid, fe);
+					}
+					let _ = lua.globals().set("_touchpad_fingers", ft);
+					let _ = lua.globals().set("_touchpad_touching", touching);
 				}
-				let ft = lua.create_table().unwrap();
-				for ((_tp, fid), f) in fingers {
-					let fe = lua.create_table().unwrap();
-					let _ = fe.set("x", f.x);
-					let _ = fe.set("y", f.y);
-					let _ = fe.set("pressure", f.pressure);
-					let _ = ft.set(*fid, fe);
-				}
-				let _ = lua.globals().set("_touchpad_fingers", ft);
-				let _ = lua.globals().set("_touchpad_touching", touching);
 			}
 		}
 
@@ -320,7 +329,7 @@ fn main() {
 
 		// ── process touchpad zones ──
 		if let Ok(on_touchpad) = lua.globals().get::<mlua::Function>("process_touchpad") {
-			for id in ctrl_mgr.connected_ids() {
+			for &id in &ids_buf {
 				match on_touchpad.call::<mlua::Table>((id,)) {
 					Ok(result) => {
 						if let Ok(pressed) = result.get::<Vec<String>>("pressed") {
