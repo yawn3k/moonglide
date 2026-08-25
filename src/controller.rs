@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use sdl2::controller::{Axis, Button, GameController};
 use sdl2::sensor::SensorType;
@@ -42,7 +42,6 @@ pub fn idx_to_button_name(idx: u8) -> String {
 pub struct ControllerManager {
 	pub controllers: HashMap<u32, GameController>,
 	pub touchpad_state: HashMap<u32, HashMap<(u32, u32), TouchpadFinger>>,
-	dirty_touchpad: HashSet<u32>,
 	sub: GameControllerSubsystem,
 }
 
@@ -57,7 +56,6 @@ impl ControllerManager {
 		let mut mgr = Self {
 			controllers: HashMap::new(),
 			touchpad_state: HashMap::new(),
-			dirty_touchpad: HashSet::new(),
 			sub,
 		};
 		let available = mgr
@@ -81,11 +79,6 @@ impl ControllerManager {
 
 	pub fn connected_ids(&self) -> impl Iterator<Item = u32> + '_ {
 		self.controllers.keys().copied()
-	}
-
-	/// Returns and clears the touchpad-changed flag for a controller.
-	pub fn take_touchpad_dirty(&mut self, id: u32) -> bool {
-		self.dirty_touchpad.remove(&id)
 	}
 
 	pub fn poll_buttons(&self, id: u32, prev: &mut u32, out: &mut Vec<(u8, bool)>) {
@@ -148,20 +141,17 @@ impl ControllerManager {
 			sdl2::event::Event::ControllerTouchpadDown { which, touchpad, finger, x, y, pressure, .. } => {
 				let key = (*touchpad, *finger);
 				self.touchpad_state.entry(*which).or_default().insert(key, TouchpadFinger { x: *x, y: *y, pressure: *pressure });
-				self.dirty_touchpad.insert(*which);
 			}
 			sdl2::event::Event::ControllerTouchpadMotion { which, touchpad, finger, x, y, pressure, .. } => {
 				let key = (*touchpad, *finger);
 				if let Some(fingers) = self.touchpad_state.get_mut(which) {
 					fingers.insert(key, TouchpadFinger { x: *x, y: *y, pressure: *pressure });
-					self.dirty_touchpad.insert(*which);
 				}
 			}
 			sdl2::event::Event::ControllerTouchpadUp { which, touchpad, finger, .. } => {
 				let key = (*touchpad, *finger);
 				if let Some(fingers) = self.touchpad_state.get_mut(which) {
 					fingers.remove(&key);
-					self.dirty_touchpad.insert(*which);
 				}
 			}
 			sdl2::event::Event::ControllerDeviceAdded { which, .. } => {
@@ -176,7 +166,6 @@ impl ControllerManager {
 				out.push(ControllerEvent::Disconnected(*which));
 				self.controllers.remove(which);
 				self.touchpad_state.remove(which);
-				self.dirty_touchpad.remove(which);
 			}
 			_ => {}
 		}

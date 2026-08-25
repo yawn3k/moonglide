@@ -265,26 +265,24 @@ fn main() {
 				}
 			}
 
-			// ── touchpad position globals (rebuilt only when touch state changed) ──
-			if ctrl_mgr.take_touchpad_dirty(id) {
-				if let Some(fingers) = ctrl_mgr.poll_touchpad(id) {
-					let touching = !fingers.is_empty();
-					if let Some(f0) = fingers.get(&(0, 0)) {
-						let _ = lua.globals().set("_touchpad_x", f0.x);
-						let _ = lua.globals().set("_touchpad_y", f0.y);
-						let _ = lua.globals().set("_touchpad_pressure", f0.pressure);
-					}
-					let ft = lua.create_table().unwrap();
-					for ((_tp, fid), f) in fingers {
-						let fe = lua.create_table().unwrap();
-						let _ = fe.set("x", f.x);
-						let _ = fe.set("y", f.y);
-						let _ = fe.set("pressure", f.pressure);
-						let _ = ft.set(*fid, fe);
-					}
-					let _ = lua.globals().set("_touchpad_fingers", ft);
-					let _ = lua.globals().set("_touchpad_touching", touching);
+			// ── touchpad position globals ──
+			if let Some(fingers) = ctrl_mgr.poll_touchpad(id) {
+				let touching = !fingers.is_empty();
+				if let Some(f0) = fingers.get(&(0, 0)) {
+					let _ = lua.globals().set("_touchpad_x", f0.x);
+					let _ = lua.globals().set("_touchpad_y", f0.y);
+					let _ = lua.globals().set("_touchpad_pressure", f0.pressure);
 				}
+				let ft = lua.create_table().unwrap();
+				for ((_tp, fid), f) in fingers {
+					let fe = lua.create_table().unwrap();
+					let _ = fe.set("x", f.x);
+					let _ = fe.set("y", f.y);
+					let _ = fe.set("pressure", f.pressure);
+					let _ = ft.set(*fid, fe);
+				}
+				let _ = lua.globals().set("_touchpad_fingers", ft);
+				let _ = lua.globals().set("_touchpad_touching", touching);
 			}
 		}
 
