@@ -263,6 +263,8 @@ function _reset_internals()
 	left_stick_outer_deadzone = 1.0
 	right_stick_inner_deadzone = 0.15
 	right_stick_outer_deadzone = 1.0
+	left_stick_diagonal_angle = 22.5
+	right_stick_diagonal_angle = 22.5
 	left_ring_position = 0.8
 	right_ring_position = 0.8
 	update = nil
