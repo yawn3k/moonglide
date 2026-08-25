@@ -10,7 +10,7 @@ pub struct PendingThread {
 pub fn resume_thread(lua: &Lua, thread: mlua::Thread, pending: &mut Vec<PendingThread>, label: &str) {
 	let values = match thread.resume::<mlua::MultiValue>(()) {
 		Ok(v) => v,
-		Err(e) => { crate::log_msg(2, &format!("{} resume error: {}", label, e)); return; }
+		Err(e) => { crate::style::err_once(&format!("resume:{label}"), &format!("{label} resume error: {e}")); return; }
 	};
 	if thread.status() != mlua::ThreadStatus::Resumable { return; }
 	let delay = values.get(0).and_then(|v| {
@@ -26,7 +26,7 @@ pub fn resume_thread(lua: &Lua, thread: mlua::Thread, pending: &mut Vec<PendingT
 				});
 			}
 		}
-		None => crate::log_msg(2, &format!("{} resumable but no delay", label)),
+		None => crate::style::err_once(&format!("no-delay:{label}"), &format!("{label} yielded without a delay; dropping coroutine")),
 	}
 }
 
@@ -85,7 +85,7 @@ pub fn poll_pending_threads(pending: &mut Vec<PendingThread>, lua: &Lua) {
 				crate::log_msg(2, &format!("polling: resuming thread (was due at {:?})", due));
 				resume_thread(lua, thread, pending, "re-scheduled");
 			}
-			Err(_) => crate::log_msg(1, "polling: failed to retrieve thread from registry"),
+			Err(_) => crate::style::err_once("registry", "failed to retrieve thread from registry"),
 		}
 	}
 }

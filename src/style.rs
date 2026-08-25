@@ -1,7 +1,27 @@
+use std::collections::HashMap;
 use std::io::IsTerminal;
 use std::sync::atomic::AtomicBool;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 static USE_COLOR: AtomicBool = AtomicBool::new(true);
+
+static LAST_ERR: LazyLock<Mutex<HashMap<String, Instant>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Print an error to stderr, suppressing repeats of the same key within 5 seconds.
+/// Safe for hot loops that would otherwise spam 1000 lines per second.
+pub fn err_once(key: &str, msg: &str) {
+	let now = Instant::now();
+	let mut last = LAST_ERR.lock().unwrap();
+	match last.get(key) {
+		Some(t) if now.duration_since(*t) < Duration::from_secs(5) => {}
+		_ => {
+			last.insert(key.to_string(), now);
+			drop(last);
+			eprintln!("{}", err(msg));
+		}
+	}
+}
 
 pub fn init() {
 	let tty = std::io::stdout().is_terminal();

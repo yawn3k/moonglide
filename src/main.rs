@@ -223,19 +223,25 @@ fn main() {
 
 			if let Some((gx, gy, gz, ax, ay, az)) = ctrl_mgr.poll_sensors(id) {
 				if let Ok(f) = lua.globals().get::<mlua::Function>("on_sensor_event") {
-					let _ = f.call::<()>((gx as f64, gy as f64, gz as f64, ax as f64, ay as f64, az as f64, frame_dt, true));
+					if let Err(e) = f.call::<()>((gx as f64, gy as f64, gz as f64, ax as f64, ay as f64, az as f64, frame_dt, true)) {
+						style::err_once("on_sensor_event", &format!("on_sensor_event error: {e}"));
+					}
 				}
 
-				if let Ok(result) = lua.globals().get::<mlua::Function>("process_gyro")
-					.and_then(|f| f.call::<mlua::Table>((gx as f64, gy as f64, gz as f64, frame_dt)))
-				{
-					let dx = result.get("dx").unwrap_or(0.0);
-					let dy = result.get("dy").unwrap_or(0.0);
-					if dx != 0.0 || dy != 0.0 {
-						if let Some(mouse) = state.dev.mouse.as_mut() {
-							let _ = mouse.move_mouse(dx, dy);
+				match lua.globals().get::<mlua::Function>("process_gyro") {
+					Ok(f) => match f.call::<mlua::Table>((gx as f64, gy as f64, gz as f64, frame_dt)) {
+						Ok(result) => {
+							let dx = result.get("dx").unwrap_or(0.0);
+							let dy = result.get("dy").unwrap_or(0.0);
+							if dx != 0.0 || dy != 0.0 {
+								if let Some(mouse) = state.dev.mouse.as_mut() {
+									let _ = mouse.move_mouse(dx, dy);
+								}
+							}
 						}
-					}
+						Err(e) => style::err_once("process_gyro", &format!("process_gyro error: {e}")),
+					},
+					Err(_) => {}
 				}
 			}
 
@@ -294,7 +300,7 @@ fn main() {
 							}
 						}
 					}
-					Err(_) => {}
+					Err(e) => style::err_once("process_sticks", &format!("process_sticks error: {e}")),
 				}
 			}
 		}
@@ -317,15 +323,16 @@ fn main() {
 							}
 						}
 					}
-					Err(_) => {}
+					Err(e) => style::err_once("process_touchpad", &format!("process_touchpad error: {e}")),
 				}
 			}
 		}
 
 		// ── Lua frame callback ──
 		if let Ok(on_update_fn) = lua.globals().get::<mlua::Function>("on_update") {
-			if let Ok(thread) = lua.create_thread(on_update_fn) {
-				resume_thread(&lua, thread, &mut pending, "on_update");
+			match lua.create_thread(on_update_fn) {
+				Ok(thread) => resume_thread(&lua, thread, &mut pending, "on_update"),
+				Err(e) => style::err_once("on_update_thread", &format!("on_update thread error: {e}")),
 			}
 		}
 
