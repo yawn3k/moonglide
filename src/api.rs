@@ -12,6 +12,9 @@ fn reset_to_defaults(lua: &Lua, mapper: &Mutex<Mapper>) -> mlua::Result<()> {
 		.get::<mlua::Function>("_reset_internals")?
 		.call::<()>(())?;
 	crate::config::setup_dsl(lua).map_err(|e| mlua::Error::runtime(e))?;
+	if let Ok(f) = lua.globals().get::<mlua::Function>("_run_reset_hooks") {
+		f.call::<()>(())?;
+	}
 	Ok(())
 }
 

@@ -113,6 +113,7 @@ Main loop runs at ~1000 Hz with drift-compensated frame pacing (FramePacer). The
 - `make_curve()` — factory for acceleration curve helpers (`gyro.lua`)
 - `curve.precision` / `curve.linear` — built-in acceleration curves (`gyro.lua`)
 - `on_btn_down/up/update` — event dispatching (chords, modeshift, DP, hold timers) (`events.lua`)
+- `on_reset(fn)` / `_run_reset_hooks()` — plugin reset hooks, run after `reset()`/`reload()` restores core + DSL (`events.lua`); `_reset_internals()` also clears `package.loaded` so `require()` re-executes plugins
 
 `init_bare()` sets `package.path` to `./?.lua`. `load(path)` prepends the config file's directory to `package.path`, then executes the file. No Rust-side struct conversion — all binding logic stays in Lua.
 

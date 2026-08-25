@@ -275,4 +275,26 @@ function _reset_internals()
 	update = nil
 	_toggled = {}
 	gyro_reset()
+
+	-- drop cached modules so require() re-executes plugins with fresh state
+	for k in pairs(package.loaded) do
+		if k ~= "_G" then package.loaded[k] = nil end
+	end
+end
+
+-- ── plugin lifecycle ──
+-- plugins call on_reset(fn) to have fn run after every reset()/reload()
+-- restores the core + DSL (so hook bind.* calls are not wiped).
+-- the registry survives DSL re-runs and clears itself after firing;
+-- plugins re-register when their module re-executes after a reset
+reset_hooks = reset_hooks or {}
+function on_reset(fn)
+	table.insert(reset_hooks, fn)
+end
+function _run_reset_hooks()
+	for _, f in ipairs(reset_hooks) do
+		local ok, err = pcall(f)
+		if not ok then log(1, "on_reset hook error: " .. tostring(err)) end
+	end
+	reset_hooks = {}
 end
