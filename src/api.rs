@@ -72,16 +72,12 @@ pub fn register_api(lua: &Lua, mapper: &Arc<Mutex<Mapper>>) {
 			.unwrap();
 	}
 
+	let start = std::time::Instant::now();
 	lua.globals()
 		.set(
 			"_now",
 			lua.clone()
-				.create_function(move |_, ()| {
-					Ok(std::time::SystemTime::now()
-						.duration_since(std::time::UNIX_EPOCH)
-						.unwrap_or_default()
-						.as_secs_f64())
-				})
+				.create_function(move |_, ()| Ok(start.elapsed().as_secs_f64()))
 				.unwrap(),
 		)
 		.unwrap();
