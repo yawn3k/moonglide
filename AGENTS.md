@@ -3,6 +3,20 @@
 JoyShockMapper-inspired controller remapper in Rust, configured via Lua, using SDL2.
 Supports gyro + mouse/keyboard output.
 
+## Design Principles
+
+These rules exist because breaking them caused real rework. If a change tensions against one of them, stop and ask.
+
+- **Simple over clever.** Smallest code that works. No caches, dirty flags, event channels, or abstractions without a measured reason. Deleting code is the preferred fix.
+- **Everything happens on the 1000 Hz frame.** Inputs are polled, every Lua stage runs, and all shared state is published once per frame (`process_sticks`, `process_gyro`, `on_btn_down/up`, `on_update`, `_touchpad_*` globals). Device events that SDL only pushes (e.g. touchpad) are collected into state, then published per frame like everything else — no lazy updates, no gating.
+- **Performance means guarding the loop, not micro-optimizing.** Fresh small tables at 1000 Hz are effectively free; don't trade clarity or safety for invisible allocation wins. Real savings come from skipping work wholesale (e.g. gyro fusion runs only for `player`/`world` spaces).
+- **Snapshot semantics.** Functions return fresh values. Never hand out tables or objects that will mutate later — consumers must be able to store a result and read it a frame later.
+- **Lua owns the remapping.** Rust polls devices and shuttles data; all binding and processing logic lives in `src/lua/*.lua`. Every pipeline stage is an overridable global — wrap-and-extend (`local builtin = process_gyro`) must always work. New knobs are globals read by Lua per frame, never Rust-side config structs.
+- **Defaults preserve existing behavior.** New shapes are opt-in (e.g. a scalar inner deadzone stays JSM-style circular; `{h, v}` opts into cross/square). JoyShockMapper is the reference for feel — diverge deliberately, and document the divergence.
+- **Plugins are plain `require()`.** A plugin is a normal module with require-time side effects; the config dir is already on `package.path`. `reset()`/`reload()` drop `package.loaded` (modules re-execute fresh) and fire `on_reset(fn)` hooks after core + DSL restore. That is the entire plugin API — no framework, no loader, no manifest.
+- **Verify before claiming done.** Behavior-affecting changes get proven equivalent or correct (harness diffs, smoke tests) plus `cargo test`, before commit.
+- **Housekeeping:** never commit without explicit consent; keep AGENTS.md and `docs/` true to the code in the same change.
+
 ## Build & Run
 
 ```bash
