@@ -159,7 +159,8 @@ mouse = {}
 ---@field in_game_sens? number
 ---@field deadzone? number
 ---@field space? string
----@field acceleration? function
+--- Acceleration curve: receives post-space 2D output speed (deg/s) and returns a multiplier.
+---@field acceleration? fun(speed_dps: number): number
 
 --- @param cfg gyro_config
 function gyro(cfg) end

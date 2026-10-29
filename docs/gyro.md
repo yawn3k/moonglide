@@ -11,7 +11,7 @@ gyro {
     in_game_sens = 1.0,       -- match your game's sensitivity slider
     deadzone = 0,             -- deg/s threshold below which output is suppressed
     space = "local_yaw",      -- one of: local_yaw, local_roll, player, world
-    acceleration = nil,       -- function(speed_dps) → multiplier, or a curve helper
+    acceleration = nil,       -- function(output_speed_dps) → multiplier, or a curve helper
 }
 ```
 
@@ -97,7 +97,9 @@ Updated only while a fusion space (`player` / `world`) is active — frozen othe
 
 ## Acceleration Curves
 
-`gyro { acceleration = fn }` — a user-defined function that scales gyro output based on bias-corrected controller rotational speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
+`gyro { acceleration = fn }` — a user-defined function that scales gyro output based on 2D mapped output speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
+
+The speed is measured after the gyro space transform and deadzone, matching JoyShockMapper: it is the magnitude of the 2D vector that becomes mouse movement, so rotation the current space ignores (e.g. roll in `local_yaw`) does not contribute. It is computed **before** `sensitivity` is applied, even though the returned multiplier is applied after sensitivity.
 
 ```lua
 gyro { acceleration = function(speed)
@@ -128,7 +130,7 @@ gyro { acceleration = function(s)
 end }
 ```
 
-The `acceleration` function runs after sensitivity and deadzone but before sub-pixel accumulation. `curve.precision` and `curve.linear` read their state from a shared table that persists across frames — configuration persists until changed or `reset()`.
+The `acceleration` function runs after the space transform and deadzone but before sub-pixel accumulation. Its speed input is the pre-sensitivity 2D output magnitude; the multiplier it returns is applied after sensitivity. `curve.precision` and `curve.linear` read their state from a shared table that persists across frames — configuration persists until changed or `reset()`.
 
 ## Deadzone
 

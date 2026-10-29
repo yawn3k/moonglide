@@ -210,7 +210,7 @@ Internally:
 - **Sensor fusion**: JSM-style complementary filter — gyro rotation → quaternion → accel smoothing + shakiness → gravity correction → quaternion tilt correction. Runs **only for `player`/`world` spaces** (internal units deg/s + g, matching GamepadMotionHelpers); `local_yaw`/`local_roll` bypass fusion entirely
 - **on_sensor_event()** called once per frame (~1000 Hz) with the latest gyro + accel sample: updates `_gyro_raw`/`_accel_raw` globals, handles calibration samples (gated on `is_gyro`); runs bias subtraction and drives fusion (fusion spaces only, which also sync `_gravity`/`_orientation`)
 - **Gyro deadzone**: configurable in deg/s (`GYRO_CUTOFF_SPEED`), suppresses output below threshold on per-frame velocity (2D magnitude after space transform)
-- **Acceleration curves**: `gyro { acceleration = fn }` — user-defined function that takes bias-corrected speed (deg/s) and returns a multiplier; applied after sensitivity/deadzone, before sub-pixel accumulation
+- **Acceleration curves**: `gyro { acceleration = fn }` — user-defined function that takes post-space 2D output speed (deg/s) and returns a multiplier; speed is measured after space transform/deadzone but before sensitivity, and the multiplier is applied after sensitivity
 - `curve.precision { threshold, min_factor }` — smoothstep 0→1×, configurable via table call
 - `curve.linear { threshold, min, max }` — linear ramp min→max, configurable via table call
 - Both curves share state across frames; reset via `reset()`
@@ -295,4 +295,4 @@ Set via the `gyro(tbl)` function in config:
 | `in_game_sens` | 1.0 | Game's mouse sensitivity value |
 | `deadzone` | 0 | Gyro cutoff speed in deg/s (JSM `GYRO_CUTOFF_SPEED`) |
 | `space` | `"local_yaw"` | One of: `local_yaw`, `local_roll`, `player`, `world` |
-| `acceleration` | `nil` | Function `(speed_dps) → multiplier` or curve helper reference |
+| `acceleration` | `nil` | Function `(output_speed_dps) → multiplier` or curve helper reference; input is post-space 2D output speed before sensitivity |

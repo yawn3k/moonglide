@@ -81,7 +81,7 @@ local gyro_state = {
 	-- gyro space
 	space = "local_yaw",
 
-	-- acceleration curve function (takes speed_dps, returns multiplier)
+	-- acceleration curve function (takes post-space 2D output speed, returns multiplier)
 	accel_fn = nil,
 }
 
@@ -403,7 +403,7 @@ function process_gyro(gx, gy, gz, dt)
 	local dy = deg_y_s * dt * conv * gyro_state.sens_v
 
 	if gyro_state.accel_fn then
-		local speed_dps = vlen(cgx, cgy, cgz) * RAD_TO_DEG
+		local speed_dps = math.sqrt(deg_x_s * deg_x_s + deg_y_s * deg_y_s)
 		local factor = gyro_state.accel_fn(speed_dps)
 		dx = dx * (factor or 1)
 		dy = dy * (factor or 1)
