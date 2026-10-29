@@ -97,7 +97,7 @@ Updated only while a fusion space (`player` / `world`) is active — frozen othe
 
 ## Acceleration Curves
 
-`gyro { acceleration = fn }` — a user-defined function that scales gyro output based on raw controller rotational speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
+`gyro { acceleration = fn }` — a user-defined function that scales gyro output based on bias-corrected controller rotational speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
 
 ```lua
 gyro { acceleration = function(speed)

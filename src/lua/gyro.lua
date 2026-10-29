@@ -403,7 +403,7 @@ function process_gyro(gx, gy, gz, dt)
 	local dy = deg_y_s * dt * conv * gyro_state.sens_v
 
 	if gyro_state.accel_fn then
-		local speed_dps = vlen(gx, gy, gz) * RAD_TO_DEG
+		local speed_dps = vlen(cgx, cgy, cgz) * RAD_TO_DEG
 		local factor = gyro_state.accel_fn(speed_dps)
 		dx = dx * (factor or 1)
 		dy = dy * (factor or 1)
