@@ -190,6 +190,14 @@ function gyro_calibrate_stop()
 	_info(string.format("gyro calibration complete (%d samples)", n))
 end
 
+-- the only function that clears calibration bias
+function gyro_calibrate_reset()
+	_gyro_bias_x, _gyro_bias_y, _gyro_bias_z = 0, 0, 0
+	gyro_state.cal_samples = {}
+	gyro_state.calibrating = false
+	_info("gyro calibration bias reset")
+end
+
 -- ── fusion helpers ──
 
 local function apply_gyro_rotation(cgx, cgy, cgz, dt)
@@ -422,7 +430,8 @@ function process_gyro(gx, gy, gz, dt)
 	return {}
 end
 
-function gyro_reset()
+-- runtime state only: settings and calibration bias survive disconnects
+function _gyro_clear_state()
 	gyro_state.calibrating = false
 	gyro_state.cal_samples = {}
 	gyro_state.hold_button = nil
@@ -430,12 +439,27 @@ function gyro_reset()
 	gyro_state.accum_x = 0
 	gyro_state.accum_y = 0
 	reset_fusion()
-	gyro_state.deadzone = 0
-	gyro_state.space = "local_yaw"
-	gyro_state.accel_fn = nil
 
 	_gravity.x, _gravity.y, _gravity.z = 0, 0, 0
 	_orientation.w, _orientation.x, _orientation.y, _orientation.z = 1, 0, 0, 0
+end
+
+local curve_resets = {}
+local function reset_curves()
+	for _, reset in ipairs(curve_resets) do reset() end
+end
+
+-- full gyro reset: settings + runtime; calibration bias is preserved
+function gyro_reset()
+	_gyro_clear_state()
+
+	gyro_state.sens_h, gyro_state.sens_v = 1, 1
+	gyro_state.calibration = 45.454
+	gyro_state.in_game_sens = 1
+	gyro_state.deadzone = 0
+	gyro_state.space = "local_yaw"
+	gyro_state.accel_fn = nil
+	reset_curves()
 end
 
 local function make_curve(defaults, fn)
@@ -448,6 +472,10 @@ local function make_curve(defaults, fn)
 			return func
 		end
 		return fn(state, arg)
+	end
+	curve_resets[#curve_resets + 1] = function()
+		for k in pairs(state) do state[k] = nil end
+		for k, v in pairs(defaults) do state[k] = v end
 	end
 	return func
 end

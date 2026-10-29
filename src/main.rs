@@ -260,7 +260,8 @@ fn main() {
 					ControllerEvent::Connected(id) => println!("{}", style::green(&format!("controller connected (instance {})", id))),
 					ControllerEvent::Disconnected(id) => {
 						println!("{}", style::yellow(&format!("controller disconnected (instance {})", id)));
-						let _ = lua.globals().get::<mlua::Function>("gyro_reset").map(|f| f.call::<()>(()));
+						// runtime only: settings and calibration bias survive reconnect
+						let _ = lua.globals().get::<mlua::Function>("_gyro_clear_state").map(|f| f.call::<()>(()));
 						let _ = lua.globals().get::<mlua::Function>("cleanup_controller").map(|f| f.call::<()>((id,)));
 						state.axis_state.remove(&id);
 						state.prev_buttons.remove(&id);

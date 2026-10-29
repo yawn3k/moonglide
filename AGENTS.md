@@ -148,7 +148,7 @@ Available from the REPL or from any config:
 
 | Function | Description |
 |----------|-------------|
-| `reset()` | Clear all bindings, gyro state, stick state, config globals, and release all held keys. Re-runs the DSL to reset all Lua-side state. Gyro calibration bias (`_gyro_bias_x/y/z`) is preserved. |
+| `reset()` | Clear all bindings, gyro state, stick state, config globals, and release all held keys. Re-runs the DSL to reset all Lua-side state. Gyro calibration bias (`_gyro_bias_x/y/z`) is preserved — use `gyro_calibrate_reset()` to clear it. |
 | `reload()` | Same as `reset()`, then re-loads the CLI config file from disk. No-op if no config was given at launch. |
 
 ```lua
@@ -213,10 +213,11 @@ Internally:
 - **Acceleration curves**: `gyro { acceleration = fn }` — user-defined function that takes post-space 2D output speed (deg/s) and returns a multiplier; speed is measured after space transform/deadzone but before sensitivity, and the multiplier is applied after sensitivity
 - `curve.precision { threshold, min_factor }` — smoothstep 0→1×, configurable via table call
 - `curve.linear { threshold, min, max }` — linear ramp min→max, configurable via table call
-- Both curves share state across frames; reset via `reset()`
+- Both curves share state across frames; reset via `reset()`/`gyro_reset()`
 - Bias subtraction: `value - bias` for X, Y, Z axes
-- Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias (now 3 axes including Z)
-- Calibration bias stored in `_gyro_bias_x/y/z` globals — persists across `reset()` and `reload()`
+- Calibration: `gyro_calibrate_start()` collects samples, `gyro_calibrate_stop()` computes per-axis bias (now 3 axes including Z), `gyro_calibrate_reset()` clears it
+- Calibration bias stored in `_gyro_bias_x/y/z` globals — persists across `reset()`, `reload()`, `gyro_reset()`, and controller reconnects; only `gyro_calibrate_reset()` clears it
+- Controller disconnect calls `_gyro_clear_state()` (runtime only: activation, accumulation, fusion, gravity/orientation) so settings and bias survive reconnect
 - Gravity auto-initialized from first valid accelerometer reading — no hardcoded orientation guess
 - Activation: `gyro_enable()`/`gyro_disable()`/`gyro_toggle()`/`gyro_hold()` called from bindings
 

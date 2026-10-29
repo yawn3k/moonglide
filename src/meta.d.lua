@@ -169,6 +169,9 @@ function gyro(cfg) end
 function gyro_calibrate_start() end
 --- Stop gyro calibration and apply bias.
 function gyro_calibrate_stop() end
+--- Clear the calibration bias and any in-progress calibration samples.
+--- This is the only function that resets calibration.
+function gyro_calibrate_reset() end
 
 --- Enable gyro (from a binding callback).
 function gyro_enable() end
@@ -191,8 +194,8 @@ function gyro_get_bias() end
 ---@return number deadzone
 function gyro_get_state() end
 
---- Reset gyro runtime state (activation, accumulation, fusion, deadzone,
---- space, acceleration curve). Calibration bias is preserved.
+--- Reset all gyro settings and runtime state to defaults.
+--- Calibration bias is preserved; use gyro_calibrate_reset() to clear it.
 function gyro_reset() end
 
 --- Clear all bindings and release held keys.
@@ -312,7 +315,8 @@ _touchpad_pressure = 0
 ---@type table<integer, {x: number, y: number, pressure: number}>
 _touchpad_fingers = {}
 
---- Per-axis gyro calibration bias (rad/s); persists across reset()/reload().
+--- Per-axis gyro calibration bias (rad/s); persists across reset()/reload(),
+--- gyro_reset(), and controller reconnects. Only gyro_calibrate_reset() clears it.
 ---@type number
 _gyro_bias_x = 0
 ---@type number
