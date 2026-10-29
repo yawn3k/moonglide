@@ -77,7 +77,7 @@ end)
 
 ## Per-Frame Globals
 
-Updated every sensor event (~2000 Hz combined gyro + accel):
+Updated once per frame (~1000 Hz) with the latest gyro + accel sample:
 
 | Global | Content |
 |--------|---------|
@@ -93,7 +93,7 @@ Updated only while a fusion space (`player` / `world`) is active — frozen othe
 
 ## Sensor Event Callback
 
-`on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)` is called on every sensor event (gyro AND accel). Can be overridden for custom calibration, fusion, or logging. The default implementation handles bias and calibration sampling on every event; the JSM-style complementary filter (gravity tracking + orientation) runs only when the current space is `player` or `world`.
+`on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)` is called once per frame (~1000 Hz) with the latest gyro + accel sample. Can be overridden for custom calibration, fusion, or logging. The default implementation handles bias and calibration sampling on every call; the JSM-style complementary filter (gravity tracking + orientation) runs only when the current space is `player` or `world`.
 
 ## Acceleration Curves
 

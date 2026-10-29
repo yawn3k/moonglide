@@ -73,6 +73,7 @@ con = {}
 ---@field rightbrace string
 ---@field enter string
 ---@field left_control string
+---@field a string
 ---@field s string
 ---@field d string
 ---@field f string
@@ -87,6 +88,7 @@ con = {}
 ---@field left_shift string
 ---@field backslash string
 ---@field z string
+---@field x string
 ---@field c string
 ---@field v string
 ---@field b string
@@ -140,11 +142,13 @@ con = {}
 ---@field nine string
 key = {}
 
---- Mouse buttons.
+--- Mouse buttons and scroll wheel.
 ---@class mouse_table
 ---@field left string
 ---@field right string
 ---@field middle string
+---@field wheel_up string
+---@field wheel_down string
 mouse = {}
 
 --- Gyro sensitivity configuration.
@@ -174,8 +178,27 @@ function gyro_toggle() end
 --- Enable gyro while the current binding's button is held.
 function gyro_hold() end
 
+--- Current gyro bias (rad/s), as set by calibration.
+---@return number x
+---@return number y
+---@return number z
+function gyro_get_bias() end
+
+--- Current gyro activation state.
+---@return boolean active
+---@return string space
+---@return number deadzone
+function gyro_get_state() end
+
+--- Reset gyro runtime state (activation, accumulation, fusion, deadzone,
+--- space, acceleration curve). Calibration bias is preserved.
+function gyro_reset() end
+
 --- Clear all bindings and release held keys.
 function reset() end
+
+--- Reset to defaults, then re-load the CLI config file from disk.
+function reload() end
 
 --- Yield for N seconds (non-blocking).
 ---@param seconds number
@@ -227,6 +250,13 @@ _current_btn = ""
 --- @field double_press fun(button: string, action: string|fun(), opts?: double_press_opts)
 --- @field modeshift fun(modifiers: string[], button: string, action: string|fun())
 bind = {}
+
+--- @class unbind_table
+--- @field press fun(button: string)
+--- @field release fun(button: string)
+--- @field tap fun(button: string)
+--- @field hold fun(button: string)
+unbind = {}
 
 --- Gyro acceleration curve helpers.
 ---@class curve_table
@@ -280,3 +310,89 @@ _touchpad_y = 0
 _touchpad_pressure = 0
 ---@type table<integer, {x: number, y: number, pressure: number}>
 _touchpad_fingers = {}
+
+--- Per-axis gyro calibration bias (rad/s); persists across reset()/reload().
+---@type number
+_gyro_bias_x = 0
+---@type number
+_gyro_bias_y = 0
+---@type number
+_gyro_bias_z = 0
+
+--- Latest raw gyro sample (rad/s, before bias subtraction).
+---@type {x: number, y: number, z: number}
+_gyro_raw = {}
+
+--- Latest raw accelerometer sample (m/s²).
+---@type {x: number, y: number, z: number}
+_accel_raw = {}
+
+--- Estimated gravity direction; frozen unless the gyro space is player/world.
+---@type {x: number, y: number, z: number}
+_gravity = {}
+
+--- Current orientation quaternion; frozen unless the gyro space is player/world.
+---@type {x: number, y: number, z: number, w: number}
+_orientation = {}
+
+---@class frame_events
+---@field pressed string[]
+---@field released string[]
+
+--- Per-frame stick, ring, and trigger processing for one controller.
+---@param which integer controller instance id
+---@param lx number left stick X (raw axis value)
+---@param ly number left stick Y (raw axis value)
+---@param rx number right stick X (raw axis value)
+---@param ry number right stick Y (raw axis value)
+---@param lt number left trigger (raw axis value)
+---@param rt number right trigger (raw axis value)
+---@return frame_events
+function process_sticks(which, lx, ly, rx, ry, lt, rt) end
+
+--- Per-frame touchpad zone processing for one controller.
+---@param id integer controller instance id
+---@return frame_events
+function process_touchpad(id) end
+
+--- Per-frame gyro processing; returns sub-pixel movement for this frame.
+---@param gx number raw gyro X (rad/s)
+---@param gy number raw gyro Y (rad/s)
+---@param gz number raw gyro Z (rad/s)
+---@param dt number frame time in seconds
+---@return {dx?: integer, dy?: integer}
+function process_gyro(gx, gy, gz, dt) end
+
+--- Called once per frame with the latest gyro + accelerometer sample.
+---@param gx number raw gyro X (rad/s)
+---@param gy number raw gyro Y (rad/s)
+---@param gz number raw gyro Z (rad/s)
+---@param ax number raw accelerometer X (m/s²)
+---@param ay number raw accelerometer Y (m/s²)
+---@param az number raw accelerometer Z (m/s²)
+---@param dt number frame time in seconds
+---@param is_gyro boolean
+function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro) end
+
+--- Called when a button, stick direction, trigger, or touchpad zone goes down.
+---@param name string
+function on_btn_down(name) end
+
+--- Called when a button, stick direction, trigger, or touchpad zone goes up.
+---@param name string
+function on_btn_up(name) end
+
+--- Called once per frame after input processing; override to run per-frame logic.
+function on_update() end
+
+--- User per-frame callback, invoked from on_update(). Keys pressed with press()
+--- are released on the next frame unless pressed again.
+function update() end
+
+--- Clear per-controller stick, trigger, and touchpad state on disconnect.
+---@param id integer controller instance id
+function cleanup_controller(id) end
+
+--- Register a callback to run after reset()/reload() restores the core and DSL.
+---@param fn fun()
+function on_reset(fn) end

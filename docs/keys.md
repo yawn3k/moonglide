@@ -66,6 +66,8 @@ Unrecognized SDL button indices produce `unknown_N` names (use as string literal
 | `mouse.left` | Left click |
 | `mouse.right` | Right click |
 | `mouse.middle` | Middle click |
+| `mouse.wheel_up` | Scroll wheel up (fires on press) |
+| `mouse.wheel_down` | Scroll wheel down (fires on press) |
 
 ## Keyboard keys (via `key`)
 

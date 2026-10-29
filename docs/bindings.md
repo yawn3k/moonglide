@@ -223,7 +223,7 @@ end)
 
 ## Per-frame callback
 
-Define `function update()` to run logic every frame (~240 Hz). Inside `update()`, `held()`, `press()`, `release()`, `gyro_enable()`, etc. all work with live controller state.
+Define `function update()` to run logic every frame (~1000 Hz). Inside `update()`, `held()`, `press()`, `release()`, `gyro_enable()`, etc. all work with live controller state.
 
 Keys pressed via `press()` inside `update()` are automatically released on the next frame if `press()` is not called again — no explicit `release()` needed.
 
