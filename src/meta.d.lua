@@ -198,6 +198,10 @@ function gyro_get_state() end
 --- Calibration bias is preserved; use gyro_calibrate_reset() to clear it.
 function gyro_reset() end
 
+--- Clear gyro runtime state (activation, accumulation, fusion, gravity, orientation).
+--- Settings and calibration bias are preserved; use gyro_reset() to restore defaults.
+function _gyro_clear_state() end
+
 --- Clear all bindings and release held keys.
 function reset() end
 

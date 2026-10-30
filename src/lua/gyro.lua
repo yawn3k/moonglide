@@ -121,6 +121,9 @@ function gyro(tbl)
 	gyro_state.calibration = tbl.calibration or gyro_state.calibration
 	gyro_state.in_game_sens = tbl.in_game_sens or gyro_state.in_game_sens
 	gyro_state.deadzone = tbl.deadzone or gyro_state.deadzone
+	if tbl.space ~= nil and not (tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world") then
+		error(string.format("invalid gyro space: %s", tostring(tbl.space)))
+	end
 	if tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world" then
 		if gyro_state.space ~= tbl.space then
 			gyro_state.space = tbl.space
@@ -351,7 +354,7 @@ function on_sensor_event(gx, gy, gz, ax, ay, az, dt, is_gyro)
 		return
 	end
 
-	if not fusion_needed() then return end
+	if not fusion_needed() or not gyro_state.active then return end
 
 	-- auto-init gravity from first valid accel reading
 	if not gyro_state.grav_initialized then
