@@ -118,6 +118,12 @@ function gyro(tbl)
 	if s then
 		gyro_state.sens_h, gyro_state.sens_v = parse_sens(s)
 	end
+	if tbl.in_game_sens ~= nil and tbl.in_game_sens <= 0 then
+		error("gyro.in_game_sens must be greater than 0")
+	end
+	if tbl.calibration ~= nil and tbl.calibration <= 0 then
+		error("gyro.calibration must be greater than 0")
+	end
 	gyro_state.calibration = tbl.calibration or gyro_state.calibration
 	gyro_state.in_game_sens = tbl.in_game_sens or gyro_state.in_game_sens
 	gyro_state.deadzone = tbl.deadzone or gyro_state.deadzone
