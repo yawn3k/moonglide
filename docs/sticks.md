@@ -28,13 +28,13 @@ bind.press(con.left_stick_right, key.d)
 
 ### Cross-gate detection
 
-Directions are computed from the deadzone-processed stick position using a cross-gate. Each quadrant is split into three zones by `*_diagonal_angle` (default 22.5°), the half-width of the diagonal band:
+Directions are computed from the deadzone-processed stick position using a cross-gate. Each quadrant is split into three zones by `sticks.diagonal_angle` (default 22.5°), the half-width of the diagonal band:
 
 | Zone (angle off the nearest cardinal axis) | Directions |
 |---------------------------------------------|------------|
-| Below `45° − diagonal_angle` (e.g. < 22.5°) | Cardinal only (e.g. `left_stick_left`) |
+| Below `45° − sticks.diagonal_angle` (e.g. < 22.5°) | Cardinal only (e.g. `left_stick_left`) |
 | Within the diagonal band (e.g. 22.5°–67.5°) | Both adjacent (e.g. `left_stick_left` + `left_stick_up`) |
-| Above `45° + diagonal_angle` (e.g. > 67.5°) | The other cardinal only (e.g. `left_stick_up`) |
+| Above `45° + sticks.diagonal_angle` (e.g. > 67.5°) | The other cardinal only (e.g. `left_stick_up`) |
 
 Nothing fires while the stick is inside the deadzone. To suppress diagonal bindings, use chords with an empty callback:
 
@@ -47,20 +47,36 @@ bind.chord({con.left_stick_down, con.left_stick_left}, "")
 
 ## Deadzones
 
-Deadzones control the analog-to-digital threshold for stick direction buttons.
+Deadzones control the analog-to-digital threshold for stick direction buttons. All stick settings live under the `sticks` config table (global defaults with per-stick overrides).
 
-| Global | Default | Description |
-|--------|---------|-------------|
-| `left_stick_inner_deadzone` | 0.15 | Fraction of full deflection (0–1). Number = circular deadzone (JSM-style, applied to the stick magnitude); `{h, v}` table = per-axis cross/square. |
-| `left_stick_outer_deadzone` | 1.0 | Fraction of full deflection (0–1). Stick at or above this produces full direction. Follows the inner deadzone's shape (circular for scalar, per-axis for a table). |
-| `right_stick_inner_deadzone` | 0.15 | Same for right stick |
-| `right_stick_outer_deadzone` | 1.0 | Same for right stick |
-| `left_stick_diagonal_angle` | 22.5 | Half-angle (degrees) of the diagonal band. Lower = diagonals require a steeper tilt. |
-| `right_stick_diagonal_angle` | 22.5 | Same for right stick |
+```lua
+sticks = {
+	mode = "movement",
+	diagonal_angle = 22.5,
+	inner_deadzone = 0.15,
+	outer_deadzone = 1.0,
+	ring_position = 0.8,
+}
+```
+
+Assigning `sticks = { ... }` deep-merges into the built-in defaults, so partial tables are fine — only the keys you set are overridden. Per-stick overrides live at `sticks.left.*` / `sticks.right.*` and survive rebinding.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `sticks.mode` | `"movement"` | Stick processing mode. |
+| `sticks.diagonal_angle` | 22.5 | Half-angle (degrees) of the diagonal band. Lower = diagonals require a steeper tilt. |
+| `sticks.inner_deadzone` | 0.15 | Fraction of full deflection (0–1). Number = circular deadzone (JSM-style, applied to the stick magnitude); `{h, v}` table = per-axis cross/square. |
+| `sticks.outer_deadzone` | 1.0 | Fraction of full deflection (0–1). Stick at or above this produces full direction. |
+| `sticks.left.diagonal_angle` | 22.5 | Left stick override. |
+| `sticks.left.inner_deadzone` | 0.15 | Left stick override. |
+| `sticks.left.outer_deadzone` | 1.0 | Left stick override. |
+| `sticks.right.diagonal_angle` | 22.5 | Right stick override. |
+| `sticks.right.inner_deadzone` | 0.15 | Right stick override. |
+| `sticks.right.outer_deadzone` | 1.0 | Right stick override. |
 
 ### Processing
 
-A scalar `*_inner_deadzone` uses a **circular** deadzone (JSM-style):
+A scalar `sticks.inner_deadzone` uses a **circular** deadzone (JSM-style):
 
 1. If the stick's magnitude ≤ inner threshold → zeroed (nothing fires)
 2. If magnitude is between inner and outer → radially rescaled from 0–1 over the band, angle preserved
@@ -73,26 +89,26 @@ A `{h, v}` table uses a **per-axis** (cross/square) deadzone:
 3. Per axis: if ≥ outer → full deflection (1 or −1)
 
 ```lua
-left_stick_inner_deadzone = 0.3   -- ignore stick until 30% (circular)
-left_stick_outer_deadzone = 1.0   -- max direction at full tilt
+sticks.inner_deadzone = 0.3   -- ignore stick until 30% (circular)
+sticks.outer_deadzone = 1.0   -- max direction at full tilt
 ```
 
 ### Cross/square deadzones
 
-Pass a `{horizontal, vertical}` table to `*_inner_deadzone` for a per-axis (cross/square) deadzone — each axis is zeroed independently until it crosses its own threshold:
+Pass a `{horizontal, vertical}` table to `sticks.inner_deadzone` for a per-axis (cross/square) deadzone — each axis is zeroed independently until it crosses its own threshold:
 
 ```lua
-left_stick_inner_deadzone = { 0.05, 0.2 }  -- horizontal 5%, vertical 20%
+sticks.inner_deadzone = { 0.05, 0.2 }  -- horizontal 5%, vertical 20%
 ```
 
 Here a strafe with a vertical tilt below 20% snaps to pure horizontal, so UP/DOWN only fires once the vertical axis genuinely crosses 0.2. Each surviving axis is linearly rescaled from its threshold to its full-deflection threshold. A scalar (e.g. `0.15`) instead uses the circular deadzone above.
 
 ### Harder diagonals
 
-By default a direction pair fires once the stick tilts ≥22.5° off the nearest cardinal axis. Lower `*_diagonal_angle` to require a steeper tilt before the second axis joins — useful when strafing (A/D) accidentally triggers W/S:
+By default a direction pair fires once the stick tilts ≥22.5° off the nearest cardinal axis. Lower `sticks.diagonal_angle` to require a steeper tilt before the second axis joins — useful when strafing (A/D) accidentally triggers W/S:
 
 ```lua
-left_stick_diagonal_angle = 12   -- UP/DOWN only joins at ≥33° tilt
+sticks.diagonal_angle = 12   -- UP/DOWN only joins at ≥33° tilt
 ```
 
 With `12`, a strafe tilted 26° fires pure `left_stick_left`; only deliberate 33°+ tilts produce `left_stick_left` + `left_stick_up`. The default `22.5` matches the original behavior. The angle is measured on the deadzone-processed position: the circular (scalar) deadzone preserves the stick angle, so it maps 1:1 to the raw tilt, while a per-axis table's rescale shifts angles, so the effective diagonal threshold moves slightly with the `{h, v}` values.
@@ -108,13 +124,13 @@ Ring buttons are virtual buttons based on stick deflection. The ring radius is t
 | `con.right_ring_inner` | Right stick past the deadzone but below the position threshold |
 | `con.right_ring_outer` | Right stick past the deadzone and at or above the position threshold |
 
-| Global | Default | Description |
-|--------|---------|-------------|
-| `left_ring_position` | 0.8 | Fraction of full deflection (0–1). Inner ring below this, outer ring above. |
-| `right_ring_position` | 0.8 | Same for right stick |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `sticks.left.ring_position` | 0.8 | Fraction of full deflection (0–1). Inner ring below this, outer ring above. |
+| `sticks.right.ring_position` | 0.8 | Same for right stick |
 
 ```lua
-left_ring_position = 0.8
+sticks.ring_position = 0.8
 bind.press(con.left_ring_outer, key.r)
 bind.press(con.left_ring_inner, key.left_shift)
 ```
@@ -130,12 +146,12 @@ Analog triggers can act as digital buttons via the trigger threshold.
 
 ### Trigger threshold
 
-| Global | Default | Description |
-|--------|---------|-------------|
-| `trigger_threshold` | 3000 | Axis value (0–32767) that must be exceeded to count as "pressed" |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `sticks.trigger_threshold` | 3000 | Axis value (0–32767) that must be exceeded to count as "pressed" |
 
 ```lua
-trigger_threshold = 5000   -- require deeper press
+sticks.trigger_threshold = 5000   -- require deeper press
 ```
 
 ### Usage
@@ -153,7 +169,7 @@ bind.release(con.left_trigger, function()
 end)
 ```
 
-With `trigger_threshold = 3000`, the trigger must be pressed past ~9% (3000/32767) to activate. Increase the threshold for a stiffer activation point.
+With `sticks.trigger_threshold = 3000`, the trigger must be pressed past ~9% (3000/32767) to activate. Increase the threshold for a stiffer activation point.
 
 ## Touchpad
 

@@ -263,25 +263,28 @@ Internally: analog triggers (SDL axes 105/106) are handled by `TriggerTracker` i
 - `apply(key, press)` dispatches keyboard keys and mouse buttons (`left_mouse`, `right_mouse`, `middle_mouse`)
 - `synchronize_all()` calls uinput sync on both devices each frame
 
-## Stick Statics (Global Config)
+## Stick Configuration
 
-Config globals read by Lua each frame (no Rust atomics — just Lua globals):
+Config read by Lua each frame via the `sticks` table (no Rust atomics — just Lua). Global defaults with per-stick overrides. Assigning `sticks = { ... }` deep-merges into the built-in defaults (partial tables OK; per-stick overrides via `sticks.left.*` / `sticks.right.*` survive rebinding):
 
 | Lua Global | Default | Docs |
 |---|---|---|
-| `log_level` | 0 | — |
-| `trigger_threshold` | 3000 | [sticks.md](docs/sticks.md) |
+| `sticks.mode` | `"movement"` | [sticks.md](docs/sticks.md) |
+| `sticks.trigger_threshold` | 3000 | [sticks.md](docs/sticks.md) |
 | `instant_press_time` | 40 | — |
 | `hold_press_time` | 400 | [bindings.md](docs/bindings.md) |
 | `double_press_window` | 200 | [bindings.md](docs/bindings.md) |
-| `left_stick_inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — scalar (circular) or `{h, v}` (cross/square) |
-| `left_stick_outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
-| `right_stick_inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — scalar (circular) or `{h, v}` (cross/square) |
-| `right_stick_outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
-| `left_stick_diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) — degrees; lower = steeper tilt for diagonals |
-| `right_stick_diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) |
-| `left_ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
-| `right_ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
+| `sticks.inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — scalar (circular) or `{h, v}` (cross/square) |
+| `sticks.outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
+| `sticks.left.inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — left stick override |
+| `sticks.left.outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
+| `sticks.right.inner_deadzone` | 0.15 | [sticks.md](docs/sticks.md) — right stick override |
+| `sticks.right.outer_deadzone` | 1.0 | [sticks.md](docs/sticks.md) |
+| `sticks.diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) — degrees; lower = steeper tilt for diagonals |
+| `sticks.left.diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) — left stick override |
+| `sticks.right.diagonal_angle` | 22.5 | [sticks.md](docs/sticks.md) — right stick override |
+| `sticks.left.ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
+| `sticks.right.ring_position` | 0.8 | [sticks.md](docs/sticks.md) |
 
 `log_level` is the only Rust-side global stored in an `AtomicU8`, re-read from Lua on REPL commands. All others are read by Lua directly each frame — no Rust involvement.
 

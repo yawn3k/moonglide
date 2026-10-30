@@ -70,21 +70,91 @@ local stick_state = {}
 local trigger_state = {}
 local trigger_last_time = {}
 
+-- stick processing config: global defaults with per-stick overrides.
+-- `sticks = { ... }` (global rebind) deep-merges into `default_sticks`, so
+-- partial tables are fine and per-stick overrides (`sticks.right.x = ...`)
+-- survive rebinding.
+
+local default_sticks = {
+	mode = "movement",
+	trigger_threshold = 3000,
+	diagonal_angle = 22.5,
+	inner_deadzone = 0.15,
+	outer_deadzone = 1.0,
+	ring_position = 0.8,
+	left = {},
+	right = {},
+}
+
+setmetatable(_G, {
+	__index = function(_, k)
+		if k == "sticks" then return default_sticks end
+		return rawget(_G, k)
+	end,
+	__newindex = function(_, k, v)
+		if k == "sticks" and type(v) == "table" then
+			for kk, vv in pairs(v) do
+				if type(vv) == "table" and type(default_sticks[kk]) == "table" then
+					for kkk, vvv in pairs(vv) do default_sticks[kk][kkk] = vvv end
+				else
+					default_sticks[kk] = vv
+				end
+			end
+		else
+			rawset(_G, k, v)
+		end
+	end,
+})
+
+local DEFAULT_MODE = "movement"
+local DEFAULT_TRIGGER_THRESHOLD = 3000
+local DEFAULT_DIAGONAL_ANGLE = 22.5
+local DEFAULT_INNER_DEADZONE = 0.15
+local DEFAULT_OUTER_DEADZONE = 1.0
+local DEFAULT_RING_POSITION = 0.8
+
+-- resolve a stick setting: per-stick override -> global -> default
+local function stick_cfg(which, field, default)
+	local per = sticks[which]
+	local v = per and per[field]
+	if v ~= nil then return v end
+	v = sticks[field]
+	if v ~= nil then return v end
+	return default
+end
+
 function process_sticks(which, lx, ly, rx, ry, lt, rt)
+	local mode_l = stick_cfg("left", "mode", DEFAULT_MODE)
+	local mode_r = stick_cfg("right", "mode", DEFAULT_MODE)
+	if mode_l ~= "movement" or mode_r ~= "movement" then
+		error(string.format("invalid stick mode: %s / %s", tostring(mode_l), tostring(mode_r)))
+	end
+
+	local inner_l = stick_cfg("left", "inner_deadzone", DEFAULT_INNER_DEADZONE)
+	local outer_l = stick_cfg("left", "outer_deadzone", DEFAULT_OUTER_DEADZONE)
+	local diag_l = stick_cfg("left", "diagonal_angle", DEFAULT_DIAGONAL_ANGLE)
+	local ring_l = stick_cfg("left", "ring_position", DEFAULT_RING_POSITION)
+
+	local inner_r = stick_cfg("right", "inner_deadzone", DEFAULT_INNER_DEADZONE)
+	local outer_r = stick_cfg("right", "outer_deadzone", DEFAULT_OUTER_DEADZONE)
+	local diag_r = stick_cfg("right", "diagonal_angle", DEFAULT_DIAGONAL_ANGLE)
+	local ring_r = stick_cfg("right", "ring_position", DEFAULT_RING_POSITION)
+	local trigger_threshold = sticks.trigger_threshold or DEFAULT_TRIGGER_THRESHOLD
+
 	local nl = { x = lx / MAX_AXIS, y = ly / MAX_AXIS }
 	local nr = { x = rx / MAX_AXIS, y = ry / MAX_AXIS }
 
-	local lo = left_stick_outer_deadzone or 1.0
-	local ro = right_stick_outer_deadzone or 1.0
-	local lr = left_ring_position or 0.8
-	local rr = right_ring_position or 0.8
+	local lo = outer_l
+	local ro = outer_r
+	local lr = ring_l
+	local rr = ring_r
 
-	apply_deadzone(nl, left_stick_inner_deadzone, 0.15, lo)
-	apply_deadzone(nr, right_stick_inner_deadzone, 0.15, ro)
+	apply_deadzone(nl, inner_l, inner_l, lo)
+	apply_deadzone(nr, inner_r, inner_r, ro)
 
 	local current = {}
-	cross_gate(nl.x, nl.y, "left_stick", current, left_stick_diagonal_angle or 22.5)
-	cross_gate(nr.x, nr.y, "right_stick", current, right_stick_diagonal_angle or 22.5)
+	cross_gate(nl.x, nl.y, "left_stick", current, diag_l)
+	cross_gate(nr.x, nr.y, "right_stick", current, diag_r)
 
 	local llen = ((lx / MAX_AXIS) ^ 2 + (ly / MAX_AXIS) ^ 2) ^ 0.5
 	local rlen = ((rx / MAX_AXIS) ^ 2 + (ry / MAX_AXIS) ^ 2) ^ 0.5
@@ -107,7 +177,7 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	end
 
 	-- trigger processing
-	local thresh = trigger_threshold or 3000
+	local thresh = trigger_threshold
 	local t = trigger_state[which] or { lt = false, rt = false }
 	local now = _now()
 	local tl = trigger_last_time[which] or {}

@@ -32,7 +32,7 @@ Add the path to your editor's `Lua.workspace.library` for autocomplete in any pr
 While Moonglide is running, type Lua expressions at the terminal. Each expression is evaluated immediately.
 
 ```lua
-> left_stick_inner_deadzone = 0.25
+> sticks.inner_deadzone = 0.25
 > ok
 > bind.press(con.guide, key.esc)
 > ok
@@ -41,13 +41,15 @@ While Moonglide is running, type Lua expressions at the terminal. Each expressio
 After each REPL command, the following globals are re-read and applied immediately:
 
 - `log_level`
-- `trigger_threshold`
+- `sticks.trigger_threshold`
 - `instant_press_time`
 - `double_press_window`
-- `left_stick_inner_deadzone`, `left_stick_outer_deadzone`
-- `right_stick_inner_deadzone`, `right_stick_outer_deadzone`
-- `left_stick_diagonal_angle`, `right_stick_diagonal_angle`
-- `left_ring_position`, `right_ring_position`
+- `sticks.inner_deadzone`, `sticks.outer_deadzone`
+- `sticks.left.inner_deadzone`, `sticks.left.outer_deadzone`
+- `sticks.right.inner_deadzone`, `sticks.right.outer_deadzone`
+- `sticks.diagonal_angle`
+- `sticks.left.diagonal_angle`, `sticks.right.diagonal_angle`
+- `sticks.left.ring_position`, `sticks.right.ring_position`
 - Any `bind.*` calls
 - `reset()`, `reload()`, `gyro_*` calls
 

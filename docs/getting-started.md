@@ -41,7 +41,7 @@ moonglide
 While it's running, type Lua commands in the terminal (REPL) to adjust on the fly:
 
 ```lua
-> left_stick_inner_deadzone = 0.25
+> sticks.inner_deadzone = 0.25
 > ok
 ```
 

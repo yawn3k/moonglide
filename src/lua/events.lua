@@ -263,15 +263,14 @@ function _reset_internals()
 	instant_press_time = 40
 	hold_press_time = 400
 	double_press_window = 200
-	trigger_threshold = 3000
-	left_stick_inner_deadzone = 0.15
-	left_stick_outer_deadzone = 1.0
-	right_stick_inner_deadzone = 0.15
-	right_stick_outer_deadzone = 1.0
-	left_stick_diagonal_angle = 22.5
-	right_stick_diagonal_angle = 22.5
-	left_ring_position = 0.8
-	right_ring_position = 0.8
+	sticks.mode = "movement"
+	sticks.trigger_threshold = 3000
+	sticks.diagonal_angle = 22.5
+	sticks.inner_deadzone = 0.15
+	sticks.outer_deadzone = 1.0
+	sticks.ring_position = 0.8
+	sticks.left = {}
+	sticks.right = {}
 	update = nil
 	_toggled = {}
 	gyro_reset()

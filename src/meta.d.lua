@@ -284,29 +284,40 @@ curve = {}
 ---@type integer
 log_level = 0
 ---@type integer
-trigger_threshold = 3000
----@type integer
 hold_press_time = 400
 ---@type integer
 instant_press_time = 40
 ---@type integer
 double_press_window = 200
----@type number|number[]
-left_stick_inner_deadzone = 0.15
----@type number
-left_stick_outer_deadzone = 1.0
----@type number|number[]
-right_stick_inner_deadzone = 0.15
----@type number
-right_stick_outer_deadzone = 1.0
----@type number
-left_stick_diagonal_angle = 22.5
----@type number
-right_stick_diagonal_angle = 22.5
----@type number
-left_ring_position = 0.8
----@type number
-right_ring_position = 0.8
+
+--- Stick processing configuration: global defaults with per-stick overrides.
+---@class sticks_config
+---@field mode? string             -- stick mode (default "movement")
+---@field trigger_threshold? integer
+---@field diagonal_angle? number
+---@field inner_deadzone? number|number[]
+---@field outer_deadzone? number|number[]
+---@field ring_position? number
+
+--- Per-stick override table for the left/right stick.
+---@class sticks_per_stick
+---@field mode? string
+---@field diagonal_angle? number
+---@field inner_deadzone? number|number[]
+---@field outer_deadzone? number|number[]
+---@field ring_position? number
+
+---@type sticks_config
+sticks = {
+	mode = "movement",
+	trigger_threshold = 3000,
+	diagonal_angle = 22.5,
+	inner_deadzone = 0.15,
+	outer_deadzone = 1.0,
+	ring_position = 0.8,
+	left = {},
+	right = {},
+}
 
 ---@type boolean
 _touchpad_touching = false
