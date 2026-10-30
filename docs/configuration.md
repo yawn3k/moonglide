@@ -168,7 +168,7 @@ end)
 
 ## Exit
 
-Press `Escape` to quit Moonglide.
+Press `Ctrl+C` to quit Moonglide.
 
 ## Output styling
 

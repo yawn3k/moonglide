@@ -45,7 +45,7 @@ While it's running, type Lua commands in the terminal (REPL) to adjust on the fl
 > ok
 ```
 
-Press **Escape** to quit.
+Press **Ctrl+C** to quit.
 
 ### Permissions (Linux)
 

@@ -15,7 +15,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use mlua::Lua;
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 
 use controller::idx_to_button_name;
 use controller::ControllerEvent;
@@ -228,7 +227,7 @@ fn main() {
 		last_frame_time: None,
 	};
 
-	println!("{}", style::bold("Moonglide running. Press Escape to quit."));
+	println!("{}", style::bold("Moonglide running. Press Ctrl+C to quit."));
 	println!("{}", style::dim("Type Lua commands in the terminal."));
 
 	let mut pending: Vec<PendingThread> = Vec::new();
@@ -250,9 +249,9 @@ fn main() {
 
 	'running: loop {
 		for event in event_pump.poll_iter() {
-			match &event {
-				Event::Quit { .. } | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'running,
-				_ => {}
+			// Ctrl+C / SIGTERM reach us as SDL_QUIT (SDL installs the signal handler)
+			if matches!(&event, Event::Quit { .. }) {
+				break 'running;
 			}
 
 			for ce in ctrl_mgr.handle_event(&event) {
