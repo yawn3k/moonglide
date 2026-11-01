@@ -51,16 +51,24 @@ local function vcross(x1, y1, z1, x2, y2, z2)
 	return y1*z2 - z1*y2, z1*x2 - x1*z2, x1*y2 - y1*x2
 end
 
--- gyro state
+-- gyro state (runtime) + config (global table `gyro`, deep-merges on rebind)
 _gyro_bias_x = _gyro_bias_x or 0
 _gyro_bias_y = _gyro_bias_y or 0
 _gyro_bias_z = _gyro_bias_z or 0
 
-local gyro_state = {
-	active = false,
-	sens_h = 1, sens_v = 1,
+local default_gyro = {
+	sensitivity = { 1, 1 },
 	calibration = 45.454,
 	in_game_sens = 1,
+	deadzone = 0,
+	space = "local_yaw",
+	acceleration = nil,
+}
+
+install_config_global(default_gyro, "gyro")
+
+local gyro_state = {
+	active = false,
 	accum_x = 0, accum_y = 0,
 	cal_samples = {},
 	calibrating = false,
@@ -74,15 +82,6 @@ local gyro_state = {
 
 	-- flag for gravity auto-init
 	grav_initialized = false,
-
-	-- gyro deadzone in deg/s
-	deadzone = 0,
-
-	-- gyro space
-	space = "local_yaw",
-
-	-- acceleration curve function (takes post-space 2D output speed, returns multiplier)
-	accel_fn = nil,
 }
 
 -- init gravity/orientation globals from module load
@@ -101,7 +100,7 @@ end
 
 -- fusion is only consumed by the player/world spaces; skip entirely otherwise
 local function fusion_needed()
-	return gyro_state.space == "player" or gyro_state.space == "world"
+	return gyro.space == "player" or gyro.space == "world"
 end
 
 local function parse_sens(val)
@@ -113,42 +112,16 @@ local function parse_sens(val)
 	return val, val
 end
 
-function gyro(tbl)
-	local s = tbl.sensitivity or tbl.gyro_sens
-	if s then
-		gyro_state.sens_h, gyro_state.sens_v = parse_sens(s)
-	end
-	if tbl.in_game_sens ~= nil and tbl.in_game_sens <= 0 then
-		error("gyro.in_game_sens must be greater than 0")
-	end
-	if tbl.calibration ~= nil and tbl.calibration <= 0 then
-		error("gyro.calibration must be greater than 0")
-	end
-	gyro_state.calibration = tbl.calibration or gyro_state.calibration
-	gyro_state.in_game_sens = tbl.in_game_sens or gyro_state.in_game_sens
-	gyro_state.deadzone = tbl.deadzone or gyro_state.deadzone
-	if tbl.space ~= nil and not (tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world") then
-		error(string.format("invalid gyro space: %s", tostring(tbl.space)))
-	end
-	if tbl.space == "local_yaw" or tbl.space == "local_roll" or tbl.space == "player" or tbl.space == "world" then
-		if gyro_state.space ~= tbl.space then
-			gyro_state.space = tbl.space
-			reset_fusion()
-		end
-	end
-	if type(tbl.acceleration) == "function" then
-		gyro_state.accel_fn = tbl.acceleration
-	else
-		gyro_state.accel_fn = nil
-	end
-end
+-- gyro config now lives in the global `gyro` table (deep-merges on rebind);
+-- see default_gyro / install_config_global above. No setter function needed —
+-- users assign `gyro = { ... }` or mutate fields like `gyro.space = ...`.
 
 function gyro_get_bias()
 	return _gyro_bias_x, _gyro_bias_y, _gyro_bias_z
 end
 
 function gyro_get_state()
-	return gyro_state.active, gyro_state.space, gyro_state.deadzone
+	return gyro_state.active, gyro.space, gyro.deadzone
 end
 
 function gyro_enable()
@@ -404,10 +377,14 @@ function process_gyro(gx, gy, gz, dt)
 	local gv = _gravity
 
 	local deg_x_s, deg_y_s
-	local space_fn = space_handlers[gyro_state.space] or space_local_yaw
+	local space = gyro.space or "local_yaw"
+	if not space_handlers[space] then
+		error(string.format("invalid gyro space: %s", tostring(space)))
+	end
+	local space_fn = space_handlers[space]
 	deg_x_s, deg_y_s = space_fn(cgx, cgy, cgz, gv)
 
-	local dz = gyro_state.deadzone
+	local dz = gyro.deadzone
 	if dz and dz > 0 then
 		local mag = math.sqrt(deg_x_s * deg_x_s + deg_y_s * deg_y_s)
 		if mag < dz then
@@ -415,13 +392,21 @@ function process_gyro(gx, gy, gz, dt)
 		end
 	end
 
-	local conv = gyro_state.calibration / gyro_state.in_game_sens
-	local dx = deg_x_s * dt * conv * gyro_state.sens_h
-	local dy = deg_y_s * dt * conv * gyro_state.sens_v
+	local sens_val = gyro.sensitivity or gyro.gyro_sens or { 1, 1 }
+	local sens_h, sens_v = parse_sens(sens_val)
+	if gyro.in_game_sens == nil or gyro.in_game_sens <= 0 then
+		error("gyro.in_game_sens must be greater than 0")
+	end
+	if gyro.calibration == nil or gyro.calibration <= 0 then
+		error("gyro.calibration must be greater than 0")
+	end
+	local conv = gyro.calibration / gyro.in_game_sens
+	local dx = deg_x_s * dt * conv * sens_h
+	local dy = deg_y_s * dt * conv * sens_v
 
-	if gyro_state.accel_fn then
+	if gyro.acceleration then
 		local speed_dps = math.sqrt(deg_x_s * deg_x_s + deg_y_s * deg_y_s)
-		local factor = gyro_state.accel_fn(speed_dps)
+		local factor = gyro.acceleration(speed_dps)
 		dx = dx * (factor or 1)
 		dy = dy * (factor or 1)
 	end
@@ -439,7 +424,7 @@ function process_gyro(gx, gy, gz, dt)
 	return {}
 end
 
--- runtime state only: settings and calibration bias survive disconnects
+-- runtime state only (config lives in the `gyro` table): calibration bias survives disconnects
 function _gyro_clear_state()
 	gyro_state.calibrating = false
 	gyro_state.cal_samples = {}
@@ -462,12 +447,12 @@ end
 function gyro_reset()
 	_gyro_clear_state()
 
-	gyro_state.sens_h, gyro_state.sens_v = 1, 1
-	gyro_state.calibration = 45.454
-	gyro_state.in_game_sens = 1
-	gyro_state.deadzone = 0
-	gyro_state.space = "local_yaw"
-	gyro_state.accel_fn = nil
+	gyro.sensitivity = { 1, 1 }
+	gyro.calibration = 45.454
+	gyro.in_game_sens = 1
+	gyro.deadzone = 0
+	gyro.space = "local_yaw"
+	gyro.acceleration = nil
 	reset_curves()
 end
 

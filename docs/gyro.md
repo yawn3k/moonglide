@@ -5,7 +5,7 @@ Gyro maps controller rotation to mouse movement. Uses sensor fusion (JSM-style c
 ## Config
 
 ```lua
-gyro {
+gyro = {
     sensitivity = 1.0,        -- multiplier (single or {h, v})
     calibration = 45.454,     -- CS2 baseline: 360° turn at sens=1, in_game_sens matching the game
     in_game_sens = 1.0,       -- match your game's sensitivity slider
@@ -14,6 +14,8 @@ gyro {
     acceleration = nil,       -- function(output_speed_dps) → multiplier, or a curve helper
 }
 ```
+
+Assigning `gyro = { ... }` deep-merges into the built-in defaults; you can also set fields directly (`gyro.space = "local_yaw"`).
 
 `sensitivity` (alias `gyro_sens`) accepts:
 - A single number (same for both axes): `sensitivity = 1.0`
@@ -98,14 +100,14 @@ Updated only while a fusion space (`player` / `world`) is active — frozen othe
 
 ## Acceleration Curves
 
-`gyro { acceleration = fn }` — a user-defined function that scales gyro output based on 2D mapped output speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
+`gyro.acceleration = fn` — a user-defined function that scales gyro output based on 2D mapped output speed (deg/s). The function takes one argument (`speed_dps`) and returns a multiplier applied to the per-frame pixel output.
 
 The speed is measured after the gyro space transform and deadzone, matching JoyShockMapper: it is the magnitude of the 2D vector that becomes mouse movement, so rotation the current space ignores (e.g. roll in `local_yaw`) does not contribute. It is computed **before** `sensitivity` is applied, even though the returned multiplier is applied after sensitivity.
 
 ```lua
-gyro { acceleration = function(speed)
+gyro.acceleration = function(speed)
     return 1 + math.min(speed / 20, 1)     -- 1×→2× boost, plateaus at 20 dps
-end }
+end
 ```
 
 ### Built-in Curves: `curve.*`
@@ -115,24 +117,24 @@ end }
 | `curve.precision` | `threshold`, `min_factor` | 5, 0 | Smoothstep from `min_factor`→1×. Suppresses jitter at low speeds. |
 | `curve.linear` | `threshold`, `min`, `max` | 20, 1, 2 | Linear ramp from `min`→`max`. |
 
-Configure via table call (returns itself for use in `gyro {}`):
+Configure via table field assignment (curve helpers are functions returned by `curve.*`):
 
 ```lua
 -- configure + use separately
 curve.precision { threshold = 8, min_factor = 0.15 }
-gyro { acceleration = curve.precision }
+gyro.acceleration = curve.precision
 
 -- one-shot
-gyro { acceleration = curve.linear { threshold = 30, min = 1, max = 3 } }
+gyro.acceleration = curve.linear { threshold = 30, min = 1, max = 3 }
 
 -- compose with your own logic
-gyro { acceleration = function(s)
+gyro.acceleration = function(s)
     return curve.precision(s) * curve.linear(s)
-end }
+end
 ```
 
 The `acceleration` function runs after the space transform and deadzone but before sub-pixel accumulation. Its speed input is the pre-sensitivity 2D output magnitude; the multiplier it returns is applied after sensitivity. `curve.precision` and `curve.linear` read their state from a shared table that persists across frames — configuration persists until changed or `reset()`.
 
 ## Deadzone
 
-`gyro { deadzone = 2 }` — JSM-style `GYRO_CUTOFF_SPEED`. When the 2D output velocity magnitude (after space transform) is below the threshold in deg/s, per-frame output is zeroed. Below threshold → zero output; above → full output. Hard gate, no ramp. Works per-frame on velocity (not accumulator), so no jump when crossing back out.
+`gyro.deadzone = 2` — JSM-style `GYRO_CUTOFF_SPEED`. When the 2D output velocity magnitude (after space transform) is below the threshold in deg/s, per-frame output is zeroed. Below threshold → zero output; above → full output. Hard gate, no ramp. Works per-frame on velocity (not accumulator), so no jump when crossing back out.

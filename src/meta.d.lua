@@ -151,7 +151,7 @@ key = {}
 ---@field wheel_down string
 mouse = {}
 
---- Gyro sensitivity configuration.
+--- Gyro sensitivity configuration (global `gyro` table; rebinding deep-merges).
 ---@class gyro_config
 ---@field sensitivity? number|number[]
 ---@field gyro_sens? number|number[]
@@ -162,8 +162,9 @@ mouse = {}
 --- Acceleration curve: receives post-space 2D output speed (deg/s) and returns a multiplier.
 ---@field acceleration? fun(speed_dps: number): number
 
---- @param cfg gyro_config
-function gyro(cfg) end
+--- Gyro configuration table.
+---@type gyro_config
+gyro = {}
 
 --- Start gyro calibration (collect bias samples).
 function gyro_calibrate_start() end

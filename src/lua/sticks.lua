@@ -71,7 +71,7 @@ local trigger_state = {}
 local trigger_last_time = {}
 
 -- stick processing config: global defaults with per-stick overrides.
--- `sticks = { ... }` (global rebind) deep-merges into `default_sticks`, so
+-- `sticks = { ... }` (global rebind) deep-merges into the defaults, so
 -- partial tables are fine and per-stick overrides (`sticks.right.x = ...`)
 -- survive rebinding.
 
@@ -86,25 +86,40 @@ local default_sticks = {
 	right = {},
 }
 
-setmetatable(_G, {
-	__index = function(_, k)
-		if k == "sticks" then return default_sticks end
-		return rawget(_G, k)
-	end,
-	__newindex = function(_, k, v)
-		if k == "sticks" and type(v) == "table" then
-			for kk, vv in pairs(v) do
-				if type(vv) == "table" and type(default_sticks[kk]) == "table" then
-					for kkk, vvv in pairs(vv) do default_sticks[kk][kkk] = vvv end
-				else
-					default_sticks[kk] = vv
+local config_globals = {}
+
+local function install_config_global(defaults, key)
+	config_globals[key] = defaults
+	setmetatable(_G, {
+		__index = function(_, k)
+			for key2, defaults2 in pairs(config_globals) do
+				if k == key2 then return defaults2 end
+			end
+			return rawget(_G, k)
+		end,
+		__newindex = function(_, k, v)
+			if type(v) == "table" then
+				for key2, defaults2 in pairs(config_globals) do
+					if k == key2 then
+						for kk, vv in pairs(v) do
+							if type(vv) == "table" and type(defaults2[kk]) == "table" then
+								for kkk, vvv in pairs(vv) do
+									defaults2[kk][kkk] = vvv
+								end
+							else
+								defaults2[kk] = vv
+							end
+						end
+						return
+					end
 				end
 			end
-		else
 			rawset(_G, k, v)
-		end
-	end,
-})
+		end,
+	})
+end
+
+install_config_global(default_sticks, "sticks")
 
 local DEFAULT_MODE = "movement"
 local DEFAULT_TRIGGER_THRESHOLD = 3000
