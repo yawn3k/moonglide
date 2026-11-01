@@ -1,6 +1,8 @@
 -- event handlers called from Rust
 -- defines on_btn_down, on_btn_up, on_update
 
+local active_chord = nil
+
 -- ── chord check ──
 local function check_chord(btn, all_held)
 	for _, chord in ipairs(chords) do
@@ -24,11 +26,14 @@ local function check_chord(btn, all_held)
 			for _, b in ipairs(chord.buttons) do
 				consumed[b] = true
 			end
-			return true
+			local bs = {}
+			for i, b in ipairs(chord.buttons) do bs[i] = b end
+			active_chord = { buttons = bs, arrival = btn }
+			return chord
 		end
 		::continue::
 	end
-	return false
+	return nil
 end
 
 -- ── double-press check ──
@@ -150,7 +155,17 @@ function on_btn_down(btn)
 	table.insert(all_held, btn)
 	::found::
 
-	if check_chord(btn, all_held) then return end
+	local fired_chord = check_chord(btn, all_held)
+	if fired_chord then
+		-- the chord supersedes individual presses of members that fired before it;
+		-- retroactively release those individual outputs
+		for _, b in ipairs(fired_chord.buttons) do
+			if b ~= btn then
+				release_keys_for_button(b, true)
+			end
+		end
+		return
+	end
 	if check_double_press(btn) then return end
 	if check_modeshift(btn) then return end
 	handle_normal_press(btn)
@@ -160,6 +175,32 @@ end
 -- ── on_btn_up ──
 function on_btn_up(btn)
 	_current_btn = btn
+
+	-- chord disarming: when a fired chord loses a member, the survivors are
+	-- plain held buttons again — release the chord key and re-fire their
+	-- individual presses so plain binds keep working while rotating
+	if consumed[btn] and active_chord then
+		local in_chord = false
+		for _, b in ipairs(active_chord.buttons) do
+			if b == btn then in_chord = true; break end
+		end
+		if in_chord then
+			local survivors = {}
+			for _, b in ipairs(active_chord.buttons) do
+				if b ~= btn and _is_held(b) then survivors[#survivors + 1] = b end
+			end
+			if #survivors > 0 then
+				release_keys_for_button(active_chord.arrival, true)
+				active_chord = nil
+				for _, b in ipairs(survivors) do
+					consumed[b] = nil
+					handle_normal_press(b)
+				end
+			else
+				active_chord = nil
+			end
+		end
+	end
 
 	if consumed[btn] then
 		release_consumed_keys(btn)
@@ -274,6 +315,7 @@ function _reset_internals()
 	update = nil
 	_toggled = {}
 	gyro_reset()
+	active_chord = nil
 
 	-- drop cached modules so require() re-executes plugins with fresh state
 	for k in pairs(package.loaded) do
