@@ -155,6 +155,10 @@ function on_btn_down(btn)
 	table.insert(all_held, btn)
 	::found::
 
+	-- modeshift beats chord: holding the modeshift modifier is explicit intent, so it
+	-- takes priority over a passive chord when both could apply to this button
+	if check_modeshift(btn) then return end
+
 	local fired_chord = check_chord(btn, all_held)
 	if fired_chord then
 		-- the chord supersedes individual presses of members that fired before it;
@@ -167,7 +171,6 @@ function on_btn_down(btn)
 		return
 	end
 	if check_double_press(btn) then return end
-	if check_modeshift(btn) then return end
 	handle_normal_press(btn)
 	check_retroactive_modeshift(btn)
 end

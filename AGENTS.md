@@ -172,11 +172,11 @@ See [docs/bindings.md](docs/bindings.md) for the full Lua API reference.
 
 Called when a physical button is pressed, a touchpad touch occurs, or a trigger crosses the threshold.
 
-1. **Chord check** — if the current button + held buttons match a chord definition, the chord fires. All chorded buttons are consumed (their individual press bindings are skipped).
-2. **Double-press check** — if the button was pressed within `window_ms`, fire the double-press binding instead, consume the press.
-3. **Modeshift check** — if the button has a modeshift whose modifiers are all held, fire the modeshift callback and mark the button as consumed (suppresses `bind.release` on release).
+1. **Modeshift check** — if the button has a modeshift whose modifiers are all held, fire the modeshift callback and mark the button as consumed (suppresses `bind.release` on release). Runs **before** the chord check: holding a modeshift modifier is explicit intent and takes priority over a passive chord.
+2. **Chord check** — if the current button + held buttons match a chord definition, the chord fires. All chorded buttons are consumed (their individual press bindings are skipped).
+3. **Double-press check** — if the button was pressed within `window_ms`, fire the double-press binding instead, consume the press.
 4. **Normal press** — if nothing consumed it, fire `bind.press` bindings for this button.
-5. **Retroactive consumption** — after all the above, check if the current button acts as a modeshift **modifier** for any already-held button. If so, retroactively mark that held button as consumed. This handles the case where the modifier is pressed *after* the action button (e.g., pressing left_trigger, then right_trigger — right_trigger's modeshift consumes left_trigger retroactively).
+5. **Retroactive consumption** — after all the above, check if the current button acts as a modeshift **modifier** for any already-held button. If so, retroactively mark that held button as consumed. This handles the case where the modifier is pressed *after* the action button (e.g., pressing left_trigger, then right_trigger — right_trigger's modeshift consumes left_trigger retroactively). The modeshift itself only fires one way: the action button must be pressed while the modifiers are already held.
 
 ### `handle_btn_up` (main.rs)
 

@@ -98,6 +98,8 @@ Fires when **all** specified buttons are held simultaneously. Individual button 
 bind.chord({con.left_shoulder, con.right_shoulder}, key.f)
 ```
 
+When a chord fires, its members' individual press/release outputs are retroactively handled: earlier members' presses are superseded by the chord, and if a member is released while the chord is still holding the remaining members, the chord key is released and surviving members re-fire their individual presses.
+
 String shorthand auto-wraps as `press(...)`:
 
 ```lua
