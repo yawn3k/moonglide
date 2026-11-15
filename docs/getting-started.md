@@ -104,4 +104,5 @@ the prerequisites above.
 - Analog stick to mouse
 - Virtual controller
 - REPL improvements
+- Flick stick
 - Compensate for windows pointer speed
