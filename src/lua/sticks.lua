@@ -77,7 +77,6 @@ local trigger_last_time = {}
 
 local default_sticks = {
 	mode = "movement",
-	trigger_threshold = 3000,
 	diagonal_angle = 22.5,
 	inner_deadzone = 0.15,
 	outer_deadzone = 1.0,
@@ -154,7 +153,7 @@ function process_sticks(which, lx, ly, rx, ry, lt, rt)
 	local outer_r = stick_cfg("right", "outer_deadzone", DEFAULT_OUTER_DEADZONE)
 	local diag_r = stick_cfg("right", "diagonal_angle", DEFAULT_DIAGONAL_ANGLE)
 	local ring_r = stick_cfg("right", "ring_position", DEFAULT_RING_POSITION)
-	local trigger_threshold = sticks.trigger_threshold or DEFAULT_TRIGGER_THRESHOLD
+	local trigger_threshold = trigger_threshold or DEFAULT_TRIGGER_THRESHOLD
 
 	local nl = { x = lx / MAX_AXIS, y = ly / MAX_AXIS }
 	local nr = { x = rx / MAX_AXIS, y = ry / MAX_AXIS }

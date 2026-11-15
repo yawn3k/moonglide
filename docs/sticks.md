@@ -148,10 +148,10 @@ Analog triggers can act as digital buttons via the trigger threshold.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `sticks.trigger_threshold` | 3000 | Axis value (0–32767) that must be exceeded to count as "pressed" |
+| `trigger_threshold` | 3000 | Axis value (0–32767) that must be exceeded to count as "pressed" |
 
 ```lua
-sticks.trigger_threshold = 5000   -- require deeper press
+trigger_threshold = 5000   -- require deeper press
 ```
 
 ### Usage
@@ -169,7 +169,7 @@ bind.release(con.left_trigger, function()
 end)
 ```
 
-With `sticks.trigger_threshold = 3000`, the trigger must be pressed past ~9% (3000/32767) to activate. Increase the threshold for a stiffer activation point.
+With `trigger_threshold = 3000`, the trigger must be pressed past ~9% (3000/32767) to activate. Increase the threshold for a stiffer activation point.
 
 ## Touchpad
 

@@ -308,7 +308,7 @@ function _reset_internals()
 	hold_press_time = 400
 	double_press_window = 200
 	sticks.mode = "movement"
-	sticks.trigger_threshold = 3000
+	trigger_threshold = 3000
 	sticks.diagonal_angle = 22.5
 	sticks.inner_deadzone = 0.15
 	sticks.outer_deadzone = 1.0

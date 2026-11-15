@@ -294,7 +294,6 @@ double_press_window = 200
 --- Stick processing configuration: global defaults with per-stick overrides.
 ---@class sticks_config
 ---@field mode? string             -- stick mode (default "movement")
----@field trigger_threshold? integer
 ---@field diagonal_angle? number
 ---@field inner_deadzone? number|number[]
 ---@field outer_deadzone? number|number[]
@@ -311,7 +310,6 @@ double_press_window = 200
 ---@type sticks_config
 sticks = {
 	mode = "movement",
-	trigger_threshold = 3000,
 	diagonal_angle = 22.5,
 	inner_deadzone = 0.15,
 	outer_deadzone = 1.0,

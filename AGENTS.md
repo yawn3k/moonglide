@@ -270,7 +270,7 @@ Config read by Lua each frame via the `sticks` table (no Rust atomics — just L
 | Lua Global | Default | Docs |
 |---|---|---|
 | `sticks.mode` | `"movement"` | [sticks.md](docs/sticks.md) |
-| `sticks.trigger_threshold` | 3000 | [sticks.md](docs/sticks.md) |
+| `trigger_threshold` | 3000 | — |
 | `instant_press_time` | 40 | — |
 | `hold_press_time` | 400 | [bindings.md](docs/bindings.md) |
 | `double_press_window` | 200 | [bindings.md](docs/bindings.md) |

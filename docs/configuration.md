@@ -41,7 +41,7 @@ While Moonglide is running, type Lua expressions at the terminal. Each expressio
 After each REPL command, the following globals are re-read and applied immediately:
 
 - `log_level`
-- `sticks.trigger_threshold`
+- `trigger_threshold`
 - `instant_press_time`
 - `double_press_window`
 - `sticks.inner_deadzone`, `sticks.outer_deadzone`
